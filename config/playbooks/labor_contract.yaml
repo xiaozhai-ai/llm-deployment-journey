@@ -1,0 +1,28 @@
+# 劳动合同专项策略
+id: "labor_contract"
+name: "劳动合同专项"
+description: "专注于劳动合同合规审查"
+role: "neutral"
+strictness: "high"
+focus_areas:
+  - "劳动报酬"
+  - "工作时间"
+  - "社会保险"
+  - "解除条件"
+  - "竞业限制"
+  - "合规性冲突"
+
+custom_prompts:
+  risk_analysis: |
+    请从《劳动合同法》角度审查此劳动合同。
+    重点关注：
+    1. 劳动报酬是否明确且不低于最低工资标准
+    2. 工作时间和休息休假是否符合法定标准
+    3. 社会保险缴纳义务是否明确
+    4. 合同解除条件是否合法
+    5. 竞业限制条款是否合理（期限、补偿金）
+
+metadata:
+  builtin: true
+  industry: "labor"
+  icon: "👷"

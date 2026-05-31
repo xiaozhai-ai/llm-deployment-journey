@@ -1,0 +1,343 @@
+# 风险规则配置（v2.6 增强版）
+# 定义各类法律文件的风险检查规则
+# 每条规则包含 detection 配置，支持关键词 + 正则 + 置信度
+
+document_types:
+  contract:
+    name: "合同"
+    required_clauses:
+      - "当事人信息"
+      - "标的"
+      - "数量"
+      - "质量"
+      - "价款或报酬"
+      - "履行期限"
+      - "履行地点"
+      - "履行方式"
+      - "违约责任"
+      - "争议解决"
+
+  agreement:
+    name: "协议"
+    required_clauses:
+      - "当事人信息"
+      - "合作内容"
+      - "权利义务"
+      - "期限"
+      - "违约责任"
+      - "争议解决"
+
+  privacy_policy:
+    name: "隐私政策"
+    required_clauses:
+      - "信息收集范围"
+      - "信息使用目的"
+      - "信息共享规则"
+      - "信息安全措施"
+      - "用户权利"
+      - "联系方式"
+      - "更新日期"
+
+# 风险规则定义
+risk_rules:
+  # ==================== 条款缺失类 ====================
+
+  - id: "MISSING_CLAUSE_001"
+    name: "违约责任条款缺失"
+    category: "条款缺失"
+    risk_level: "high"
+    description: "合同中未明确违约责任，可能导致违约方逃避法律责任"
+    legal_basis: "《中华人民共和国民法典》第五百七十七条"
+    suggestion: "建议补充违约责任条款，明确违约金数额或计算方法、赔偿范围等"
+    applicable_types: ["contract", "agreement"]
+    detection:
+      type: "missing_clause"
+      presence_keywords:
+        - "违约责任"
+        - "违约金"
+        - "赔偿损失"
+        - "违约赔偿"
+        - "违约方"
+      substance_patterns:
+        - "违约.{0,10}(金|责任|赔偿).{0,15}(约定|规定|应当|为)"
+        - "(赔偿|补偿).{0,8}(损失|金额|计算方式|标准)"
+        - "违约方.{0,15}(承担|赔偿|支付|补偿)"
+
+  - id: "MISSING_CLAUSE_002"
+    name: "争议解决条款缺失"
+    category: "条款缺失"
+    risk_level: "medium"
+    description: "未约定争议解决方式（诉讼/仲裁），可能增加后续维权成本"
+    legal_basis: "《中华人民共和国民法典》第四百七十条"
+    suggestion: "建议明确约定争议解决方式，如选择仲裁需注明仲裁机构"
+    applicable_types: ["contract", "agreement"]
+    detection:
+      type: "missing_clause"
+      presence_keywords:
+        - "争议解决"
+        - "仲裁"
+        - "管辖法院"
+        - "诉讼"
+      substance_patterns:
+        - "(仲裁|诉讼).{0,15}(委员会|法院|机构)"
+        - "(管辖|提交).{0,10}(仲裁|法院|人民法院)"
+        - "争议.{0,10}(解决|处理|协商).{0,15}(仲裁|诉讼|法院)"
+
+  - id: "MISSING_CLAUSE_003"
+    name: "履行期限条款缺失"
+    category: "条款缺失"
+    risk_level: "medium"
+    description: "未明确合同履行期限，可能导致履行拖延"
+    legal_basis: "《中华人民共和国民法典》第五百一十条"
+    suggestion: "建议补充明确的履行期限或履行时间节点"
+    applicable_types: ["contract"]
+    detection:
+      type: "missing_clause"
+      presence_keywords:
+        - "履行期限"
+        - "合同期限"
+        - "交付日期"
+        - "届满"
+        - "届期"
+        - "有效期"
+      substance_patterns:
+        - '(期限|日期|截止).{0,10}(为|自|起|至)'
+        - '\d{1,4}[\s]*(年|月|日|天|个工作)'
+        - '(自|从).{0,5}(签订|签署|生效).{0,10}(之日起|起算)'
+
+  - id: "MISSING_CLAUSE_004"
+    name: "隐私政策-信息收集范围缺失"
+    category: "条款缺失"
+    risk_level: "high"
+    description: "隐私政策未明确说明收集个人信息的范围，违反最小必要原则"
+    legal_basis: "《中华人民共和国个人信息保护法》第六条"
+    suggestion: "建议明确列出收集的个人信息类型及收集目的"
+    applicable_types: ["privacy_policy"]
+    detection:
+      type: "missing_clause"
+      presence_keywords:
+        - "信息收集"
+        - "收集个人信息"
+        - "收集范围"
+        - "收集的个人信息"
+        - "个人信息类型"
+      substance_patterns:
+        - "(收集|获取).{0,10}(包括|以下|如下).{0,20}(信息|数据|资料)"
+        - "(姓名|手机号|邮箱|地址|身份证|位置|设备).{0,10}(等|在内的)"
+        - "(信息|数据)类型.{0,15}(包括|涵盖|含)"
+
+  - id: "MISSING_CLAUSE_005"
+    name: "隐私政策-用户权利条款缺失"
+    category: "条款缺失"
+    risk_level: "high"
+    description: "未说明用户对其个人信息的权利（查阅、复制、删除等）"
+    legal_basis: "《中华人民共和国个人信息保护法》第四章"
+    suggestion: "建议补充用户权利条款，包括查阅、复制、更正、删除等权利及行使方式"
+    applicable_types: ["privacy_policy"]
+    detection:
+      type: "missing_clause"
+      presence_keywords:
+        - "用户权利"
+        - "您的权利"
+        - "查阅"
+        - "复制权"
+        - "删除权"
+        - "更正权"
+        - "撤回同意"
+      substance_patterns:
+        - "(您|用户).{0,5}(有权|可以|能够).{0,10}(查阅|复制|删除|更正|撤回)"
+        - "(查阅|复制|删除|更正|撤回).{0,10}(权|权利|您的)"
+        - "(访问|获取|导出).{0,10}(您的|个人).{0,5}(信息|数据)"
+
+  # ==================== 权利义务失衡类 ====================
+
+  - id: "IMBALANCE_001"
+    name: "单方解除权不对等"
+    category: "权利义务失衡"
+    risk_level: "high"
+    description: "仅一方享有单方解除权，另一方无对等权利"
+    legal_basis: "《中华人民共和国民法典》第四百九十七条（格式条款）"
+    suggestion: "建议修改为双方对等的解除权，或明确单方解除的合理条件"
+    applicable_types: ["contract", "agreement"]
+    detection:
+      type: "risk_condition"
+      risk_keywords:
+        - "单方解除"
+        - "一方解除"
+        - "有权解除"
+        - "随时解除"
+        - "随时终止"
+      safe_keywords:
+        - "双方均可解除"
+        - "双方均有权解除"
+        - "任一方均有权解除"
+        - "各方均可解除"
+        - "双方协商一致解除"
+
+  - id: "IMBALANCE_002"
+    name: "违约责任不对等"
+    category: "权利义务失衡"
+    risk_level: "high"
+    description: "双方违约责任标准或赔偿标准明显不对等"
+    legal_basis: "《中华人民共和国民法典》第六条（公平原则）"
+    suggestion: "建议统一双方违约责任标准，确保公平对等"
+    applicable_types: ["contract", "agreement"]
+    detection:
+      type: "risk_condition"
+      risk_keywords:
+        - "甲方违约"
+        - "乙方违约"
+      safe_keywords:
+        - "双方违约"
+        - "任何一方违约"
+        - "任一方违约"
+        - "各方违约"
+      # 需要进一步判断：如果同时出现"甲方违约"和"乙方违约"但赔偿标准不同
+      # 这种语义级判断交给 LLM，规则引擎只做初步筛选
+      require_context: true
+
+  - id: "IMBALANCE_003"
+    name: "管辖条款不利于弱势方"
+    category: "权利义务失衡"
+    risk_level: "medium"
+    description: "管辖法院/仲裁机构约定明显增加一方维权成本"
+    legal_basis: "《中华人民共和国民法典》第四百九十六条"
+    suggestion: "建议约定由被告所在地或合同履行地法院管辖"
+    applicable_types: ["contract", "agreement"]
+    detection:
+      type: "risk_condition"
+      risk_keywords:
+        - "甲方所在地"
+        - "甲方住所地"
+        - "甲方所在"
+      safe_keywords:
+        - "被告所在地"
+        - "合同履行地"
+        - "双方协商"
+        - "约定管辖"
+
+  # ==================== 合规性冲突类 ====================
+
+  - id: "COMPLIANCE_001"
+    name: "个人信息处理缺乏合法性基础"
+    category: "合规性冲突"
+    risk_level: "high"
+    description: "个人信息处理未取得个人同意或缺乏其他合法性基础"
+    legal_basis: "《中华人民共和国个人信息保护法》第十三条"
+    suggestion: "建议明确个人信息处理的合法性基础（同意/合同履行/法定义务等）"
+    applicable_types: ["privacy_policy", "contract"]
+    detection:
+      type: "risk_condition"
+      risk_keywords:
+        - "个人信息"
+        - "收集信息"
+        - "处理个人信息"
+        - "使用个人信息"
+      safe_keywords:
+        - "经您同意"
+        - "取得同意"
+        - "用户授权"
+        - "明确同意"
+        - "单独同意"
+        - "法律规定的"
+        - "合同所必需"
+        - "法定义务"
+      # 仅当出现信息处理描述但缺少合法性依据时才触发
+      require_safe_absence: true
+
+  - id: "COMPLIANCE_002"
+    name: "免责条款过度"
+    category: "合规性冲突"
+    risk_level: "high"
+    description: "免责条款可能因排除对方主要权利而无效"
+    legal_basis: "《中华人民共和国民法典》第五百零六条"
+    suggestion: "建议删除造成对方人身损害或因故意重大过失造成财产损失的免责条款"
+    applicable_types: ["contract", "agreement"]
+    detection:
+      type: "risk_condition"
+      risk_keywords:
+        - "免责"
+        - "不承担责任"
+        - "免除责任"
+        - "不承担任何责任"
+        - "概不负责"
+        - "不予赔偿"
+        - "免除其责任"
+      safe_keywords:
+        - "法律另有规定"
+        - "不可抗力"
+        - "不可抗力除外"
+
+  - id: "COMPLIANCE_003"
+    name: "数据存储与跨境传输合规"
+    category: "合规性冲突"
+    risk_level: "high"
+    description: "涉及个人信息跨境传输但未满足法定条件"
+    legal_basis: "《中华人民共和国个人信息保护法》第三十八条"
+    suggestion: "建议补充数据出境安全评估或标准合同备案说明"
+    applicable_types: ["privacy_policy", "contract"]
+    detection:
+      type: "risk_condition"
+      risk_keywords:
+        - "跨境传输"
+        - "境外"
+        - "海外"
+        - "境外服务器"
+        - "数据出境"
+        - "跨境数据"
+      safe_keywords:
+        - "安全评估"
+        - "标准合同"
+        - "个人信息保护认证"
+        - "网信部门"
+        - "出境安全"
+
+  # ==================== 格式条款风险类 ====================
+
+  - id: "FORMAT_001"
+    name: "格式条款未合理提示"
+    category: "格式条款风险"
+    risk_level: "medium"
+    description: "免责或限制责任条款未以显著方式提示"
+    legal_basis: "《中华人民共和国民法典》第四百九十六条"
+    suggestion: "建议对免除或限制责任的条款以加粗、下划线等显著方式提示"
+    applicable_types: ["contract", "agreement"]
+    detection:
+      type: "risk_condition"
+      risk_keywords:
+        - "格式条款"
+        - "预先拟定"
+        - "重复使用"
+        - "标准条款"
+        - "通用条款"
+      safe_keywords:
+        - "加粗"
+        - "下划线"
+        - "显著提示"
+        - "特别提示"
+        - "已充分说明"
+        - "重点标注"
+
+  - id: "FORMAT_002"
+    name: "格式条款排除对方主要权利"
+    category: "格式条款风险"
+    risk_level: "high"
+    description: "格式条款可能因排除对方主要权利而无效"
+    legal_basis: "《中华人民共和国民法典》第四百九十七条"
+    suggestion: "建议审查并修改可能无效的格式条款"
+    applicable_types: ["contract", "agreement"]
+    detection:
+      type: "risk_condition"
+      risk_keywords:
+        - "格式条款"
+        - "预先拟定"
+        - "不可撤销"
+        - "不得异议"
+        - "放弃抗辩"
+        - "不得抗辩"
+        - "放弃权利"
+        - "不得索赔"
+      safe_keywords:
+        - "法律法规另有规定"
+        - "依法享有"
+        - "法定权利"

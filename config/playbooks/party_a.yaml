@@ -1,0 +1,46 @@
+# 甲方审查策略
+id: "party_a"
+name: "甲方立场"
+description: "保护甲方利益，重点关注乙方违约责任和履约能力"
+role: "party_a"
+strictness: "high"
+focus_areas:
+  - "违约责任"
+  - "赔偿上限"
+  - "解除权"
+  - "知识产权归属"
+  - "保密条款"
+  - "条款缺失"
+
+risk_weight_adjustments:
+  "IMBALANCE_001":
+    level: "critical"
+    reason: "甲方视角：单方解除权不对等严重影响甲方利益"
+  "IMBALANCE_002":
+    level: "critical"
+    reason: "甲方视角：违约责任不对等可能导致甲方损失无法弥补"
+  "COMPLIANCE_002":
+    level: "high"
+    reason: "甲方视角：过度免责条款可能使乙方逃避责任"
+  "MISSING_CLAUSE_001":
+    level: "critical"
+    reason: "甲方视角：违约责任条款缺失是重大风险"
+  "MISSING_CLAUSE_002":
+    level: "high"
+    reason: "甲方视角：争议解决条款缺失影响甲方维权"
+  "IMBALANCE_003":
+    level: "high"
+    reason: "甲方视角：不利管辖条款增加甲方维权成本"
+
+custom_prompts:
+  risk_analysis: |
+    你代表甲方审查此合同。请重点关注：
+    1. 乙方的违约责任是否明确且充分
+    2. 甲方是否拥有合理的解除权和监督权
+    3. 知识产权归属是否有利于甲方
+    4. 赔偿上限是否合理保护甲方利益
+    5. 保密条款是否充分保护甲方商业秘密
+
+metadata:
+  builtin: true
+  icon: "🛡️"

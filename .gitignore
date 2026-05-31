@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment variables
+.env
+.env.local
+
+# Uploaded files (temporary)
+uploads/
+temp/
+
+# Logs
+*.log
+
+# ChromaDB data
+chroma_db/
+
+# Feedback user data (keep directory structure only)
+config/feedback/*.json
+!config/feedback/.gitkeep
+
+# Test & cache
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Windows shortcuts
+*.lnk

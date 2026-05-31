@@ -1,0 +1,46 @@
+# 乙方审查策略
+id: "party_b"
+name: "乙方立场"
+description: "保护乙方利益，重点关注责任限制和甲方义务"
+role: "party_b"
+strictness: "high"
+focus_areas:
+  - "责任限制"
+  - "付款条件"
+  - "甲方义务"
+  - "合理免责"
+  - "争议解决"
+  - "格式条款风险"
+
+risk_weight_adjustments:
+  "IMBALANCE_001":
+    level: "critical"
+    reason: "乙方视角：甲方单方解除权可能导致乙方前期投入损失"
+  "IMBALANCE_002":
+    level: "critical"
+    reason: "乙方视角：过重的违约责任可能对乙方不公平"
+  "FORMAT_001":
+    level: "high"
+    reason: "乙方视角：格式条款未提示可能隐藏不利内容"
+  "FORMAT_002":
+    level: "critical"
+    reason: "乙方视角：格式条款排除乙方权利必须重点关注"
+  "IMBALANCE_003":
+    level: "high"
+    reason: "乙方视角：不利管辖条款增加乙方维权成本"
+  "COMPLIANCE_002":
+    level: "high"
+    reason: "乙方视角：注意免责条款的合理性"
+
+custom_prompts:
+  risk_analysis: |
+    你代表乙方审查此合同。请重点关注：
+    1. 乙方的违约责任是否过重或不合理
+    2. 甲方付款条件和义务是否明确
+    3. 是否存在对乙方不利的格式条款
+    4. 争议解决条款是否对乙方公平
+    5. 乙方是否拥有合理的免责和限制责任条款
+
+metadata:
+  builtin: true
+  icon: "⚔️"

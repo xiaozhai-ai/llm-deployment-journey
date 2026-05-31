@@ -1,0 +1,49 @@
+# 隐私合规专项策略
+id: "privacy_compliance"
+name: "隐私合规专项"
+description: "专注于个人信息保护和数据合规审查"
+role: "neutral"
+strictness: "strict"
+focus_areas:
+  - "个人信息保护"
+  - "数据跨境"
+  - "用户权利"
+  - "合规性冲突"
+  - "条款缺失"
+
+required_clauses:
+  - "信息收集范围"
+  - "信息使用目的"
+  - "信息共享规则"
+  - "信息安全措施"
+  - "用户权利"
+  - "联系方式"
+
+risk_weight_adjustments:
+  "MISSING_CLAUSE_004":
+    level: "critical"
+    reason: "隐私合规：信息收集范围缺失违反最小必要原则"
+  "MISSING_CLAUSE_005":
+    level: "critical"
+    reason: "隐私合规：用户权利条款缺失违反 PIPL 要求"
+  "COMPLIANCE_001":
+    level: "critical"
+    reason: "隐私合规：个人信息处理缺乏合法性基础"
+  "COMPLIANCE_003":
+    level: "critical"
+    reason: "隐私合规：数据跨境传输需满足法定条件"
+
+custom_prompts:
+  risk_analysis: |
+    请从《个人信息保护法》《数据安全法》角度审查此文件。
+    重点关注：
+    1. 个人信息收集是否符合最小必要原则
+    2. 是否明确告知用户信息处理目的和方式
+    3. 用户权利（查阅、复制、删除、更正）是否充分保障
+    4. 数据跨境传输是否满足法定条件
+    5. 是否建立数据安全管理制度
+
+metadata:
+  builtin: true
+  industry: "privacy"
+  icon: "🔒"
