@@ -1,107 +1,124 @@
-# 法务审查 Agent v2.0 - 部署指南
+# 部署指南
 
-## Hugging Face Spaces 部署
+## Hugging Face Spaces 部署（推荐）
 
-### 步骤
+### 1. 创建 Space
 
-1. **创建 Space**
-   - 登录 [Hugging Face](https://huggingface.co/)
-   - 点击 **New Space**
-   - SDK: **Gradio**
-   - Python Version: **3.11**
+1. 登录 [Hugging Face](https://huggingface.co/)
+2. 点击 **New Space**
+3. 配置：
+   - **SDK**: Gradio
+   - **Python Version**: 3.11
+   - **Space Hardware**: CPU Basic（免费）
 
-2. **上传文件**
-   ```bash
-   git clone https://huggingface.co/spaces/<用户名>/legal-review-agent
-   cd legal-review-agent
-   # 复制所有项目文件
-   git add . && git commit -m "Deploy v2.0" && git push
-   ```
+### 2. 上传代码
 
-3. **配置 Secrets** (Settings → Repository secrets)
-   - `LLM_API_KEY`: 你的 LLM API 密钥
-   - `LLM_API_BASE`: API 端点（可选）
-   - `LLM_MODEL`: 模型名称（可选，默认 qwen-plus）
-
-## 支持的 LLM API
-
-任何兼容 OpenAI API 格式的服务：
-
-### 通义千问（推荐）
-```
-LLM_API_BASE=https://dashscope.aliyuncs.com/compatible-mode/v1
-LLM_MODEL=qwen-plus
+**方式一：Git 推送**
+```bash
+git clone https://huggingface.co/spaces/<你的用户名>/legal-review-agent
+cd legal-review-agent
+# 复制项目文件到此目录
+git add .
+git commit -m "Deploy v2.5"
+git push
 ```
 
-### 其他服务
-配置对应的 `LLM_API_BASE`、`LLM_API_KEY`、`LLM_MODEL` 即可。
+**方式二：网页上传**
+- 在 Space 的 **Files** 标签页直接上传项目文件
+
+### 3. 配置环境变量
+
+在 Space 的 **Settings → Repository secrets** 中添加：
+
+| Secret 名称 | 值 | 必需 |
+|-------------|-----|:---:|
+| `LLM_API_KEY` | 你的 LLM API 密钥 | ✅ |
+| `LLM_API_BASE` | API 端点 URL | 可选 |
+| `LLM_MODEL` | 模型名称 | 可选 |
+
+**支持的 LLM 提供商：**
+
+| 提供商 | LLM_API_BASE | LLM_MODEL |
+|--------|-------------|-----------|
+| 通义千问（默认） | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |
+| 小米 MiMo | `https://api.mimoworks.com/v1` | `mimo-v2.5-pro` |
+| OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
+| 其他 OpenAI 兼容 | 对应端点 | 对应模型名 |
+
+### 4. 重启 Space
+
+配置完 Secrets 后，点击 **Factory reboot** 重启 Space。
+
+### 5. 验证
+
+- 查看 **Logs** 标签页确认启动成功
+- 应看到 `✅ 向量库初始化完成` 和 `Running on local URL: http://0.0.0.0:7860`
+
+### ⚠️ 常见问题
+
+| 问题 | 解决方案 |
+|------|----------|
+| 启动超时 | 免费 Space 有 60s 限制，首次启动 ChromaDB 下载 ONNX 模型可能超时，重试即可 |
+| API 调用失败 | 检查 Secrets 是否正确配置，注意不要有空格 |
+| 内存不足 | 免费 Space 内存有限，大文件建议升级或使用外部向量库 |
+| 模型不可用 | 先用 `curl` 测试 API 端点连通性 |
+
+---
+
+## Docker 部署
+
+```bash
+# 构建镜像
+docker build -t legal-review-agent .
+
+# 运行容器
+docker run -d \
+  -p 7860:7860 \
+  --env-file .env \
+  --name legal-review \
+  legal-review-agent
+
+# 查看日志
+docker logs -f legal-review
+```
+
+### Docker Compose
+
+```yaml
+version: '3.8'
+services:
+  legal-review:
+    build: .
+    ports:
+      - "7860:7860"
+    env_file:
+      - .env
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+    restart: unless-stopped
+```
+
+---
 
 ## 本地开发
 
 ```bash
-# 虚拟环境
+# 创建虚拟环境
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+venv\Scripts\activate  # Windows
+# source venv/bin/activate  # Linux/Mac
 
-# 依赖
+# 安装依赖
 pip install -r requirements.txt
 
-# 运行
-export LLM_API_KEY="your-key"
+# 配置环境变量
+cp .env.example .env
+# 编辑 .env 填入 API Key
+
+# 启动
 python app.py
+
+# 运行测试
+pytest tests/ -v
 ```
-
-## 审查策略配置
-
-在 `config/playbooks/` 下创建 YAML 文件即可添加新策略：
-
-```yaml
-id: "my_custom_strategy"
-name: "自定义策略"
-description: "策略描述"
-role: "party_a"  # party_a / party_b / neutral
-strictness: "high"  # low / medium / high / strict
-focus_areas:
-  - "违约责任"
-  - "争议解决"
-risk_weight_adjustments:
-  "MISSING_CLAUSE_001":
-    level: "critical"
-    reason: "调整原因"
-custom_prompts:
-  risk_analysis: |
-    自定义 LLM prompt
-```
-
-## 自定义风险规则
-
-编辑 `config/legal_rules.yaml` 添加规则：
-
-```yaml
-risk_rules:
-  - id: "CUSTOM_001"
-    name: "自定义风险"
-    category: "风险类别"
-    risk_level: "high"
-    description: "描述"
-    legal_basis: "法律依据"
-    suggestion: "修改建议"
-    applicable_types: ["contract", "agreement"]
-```
-
-## 日志
-
-运行后会在 `logs/` 目录生成：
-- `audit.log` - 操作审计日志（JSON 格式）
-- `llm_trace.log` - LLM 推理链路日志（JSON 格式）
-
-## 常见问题
-
-**Q: ChromaDB 安装失败？**
-A: 确保 Python >= 3.8，可尝试 `pip install chromadb --no-cache-dir`
-
-**Q: HF Spaces 超时？**
-A: 免费版有 60 秒限制，大文件建议升级到付费 Space 或调整 `LLM_MODEL` 为更快的模型
-
-**Q: 如何更新法规知识库？**
-A: 编辑 `config/legal_kb.yaml` 添加新法条，重启后自动向量化
