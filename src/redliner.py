@@ -301,60 +301,137 @@ class Redliner:
         """
         try:
             from docx import Document
-            from docx.shared import RGBColor
+            from docx.enum.text import WD_ALIGN_PARAGRAPH
+            from docx.shared import Inches, Pt, RGBColor
         except ImportError as e:
             logger_manager.error(f"python-docx 未安装: {e}")
             raise DOCXGenerationError("请安装 python-docx: pip install python-docx") from e
 
         doc = Document()
 
-        # 添加标题
-        doc.add_heading("法律文件修订版", level=1)
-        p = doc.add_paragraph()
-        run = p.add_run(
-            "说明：本文档以颜色标注方式展示修订建议（红色=原条款，绿色=修订后），"
-            '非 Word 原生修订标记，无法使用"接受/拒绝修订"功能。'
-            "请人工对照后手动修改原文。"
-        )
-        run.italic = True
-        run.font.color.rgb = RGBColor(100, 100, 100)
-        doc.add_paragraph("基于自动化审查生成的修订建议，需专业律师复核确认。")
+        # 设置默认字体
+        style = doc.styles["Normal"]
+        style.font.name = "Microsoft YaHei"
+        style.font.size = Pt(11)
 
-        # 添加修订说明
+        # ── 首页：免责声明（加粗红色边框框） ──
+        doc.add_heading("法律文件修订报告", level=1)
+
+        # 免责声明放在最前面，确保用户第一时间看到
+        disclaimer = doc.add_paragraph()
+        disclaimer.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = disclaimer.add_run("⚠️ 重 要 免 责 声 明 ⚠️")
+        run.bold = True
+        run.font.size = Pt(14)
+        run.font.color.rgb = RGBColor(204, 0, 0)
+
+        disclaimer_body = doc.add_paragraph()
+        disclaimer_body.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        disclaimer_lines = [
+            "1. 本报告由 AI 辅助生成，仅供参考，不构成正式法律意见。",
+            "2. 所有修订建议须经专业律师审核确认后方可采用。",
+            '3. 本文档使用颜色标注方式展示修订（非 Word 原生修订标记），无法使用"接受/拒绝修订"功能。',
+            "4. 生成方不对因直接使用本报告内容而产生的任何损失承担责任。",
+        ]
+        for line in disclaimer_lines:
+            run = disclaimer_body.add_run(line + "\n")
+            run.font.color.rgb = RGBColor(204, 0, 0)
+            run.font.size = Pt(10)
+
+        # ── 颜色说明图例 ──
+        doc.add_heading("颜色说明", level=2)
+        legend_items = [
+            ("🔴 红色标注", "原条款文本（需要修改的内容）", RGBColor(180, 0, 0)),
+            ("🟢 绿色标注", "修订后条款文本（建议替换为）", RGBColor(0, 128, 0)),
+            ("🟡 黄色背景", "差异高亮区域", RGBColor(128, 100, 0)),
+        ]
+        for icon_label, desc, color in legend_items:
+            p = doc.add_paragraph()
+            run = p.add_run(icon_label + "：")
+            run.bold = True
+            run.font.color.rgb = color
+            p.add_run(desc)
+
+        doc.add_paragraph("——" * 20)
+
+        # ── 修订摘要 ──
         doc.add_heading("修订摘要", level=2)
-        doc.add_paragraph(f"共 {len(revisions)} 处修订建议：")
-        for i, rev in enumerate(revisions, 1):
-            doc.add_paragraph(f"{i}. {rev.risk_name}: {rev.explanation}", style="List Bullet")
+        if revisions:
+            doc.add_paragraph(f"共识别 {len(revisions)} 处需修订条款：")
+            for i, rev in enumerate(revisions, 1):
+                p = doc.add_paragraph(style="List Bullet")
+                run = p.add_run(f"{i}. {rev.risk_name}")
+                run.bold = True
+                p.add_run(f" — {rev.explanation}")
+        else:
+            doc.add_paragraph("未发现需要修订的条款。")
 
-        # 添加修订详情
-        doc.add_heading("修订详情", level=2)
+        # ── 修订详情 ──
+        if revisions:
+            doc.add_heading("修订详情", level=2)
 
-        for i, rev in enumerate(revisions, 1):
-            doc.add_heading(f"修订 {i}: {rev.risk_name}", level=3)
+            for i, rev in enumerate(revisions, 1):
+                if i > 1:
+                    doc.add_page_break()
 
-            # 原条款
-            p = doc.add_paragraph()
-            run = p.add_run("原条款: ")
-            run.bold = True
-            run.font.color.rgb = RGBColor(128, 0, 0)
-            p.add_run(rev.original_text)
+                doc.add_heading(f"修订 {i}/{len(revisions)}：{rev.risk_name}", level=3)
 
-            # 修订后
-            p = doc.add_paragraph()
-            run = p.add_run("修订后: ")
-            run.bold = True
-            run.font.color.rgb = RGBColor(0, 128, 0)
-            p.add_run(rev.revised_text)
+                # 关联信息
+                if rev.clause_title:
+                    p = doc.add_paragraph()
+                    run = p.add_run("条款位置：")
+                    run.bold = True
+                    p.add_run(rev.clause_title)
 
-            # 说明
-            doc.add_paragraph(f"说明: {rev.explanation}", style="Intense Quote")
+                if rev.risk_id:
+                    p = doc.add_paragraph()
+                    run = p.add_run("风险编号：")
+                    run.bold = True
+                    p.add_run(rev.risk_id)
 
-        # 免责声明
+                doc.add_paragraph()
+
+                # 原条款
+                p = doc.add_paragraph()
+                run = p.add_run("📄 原条款：")
+                run.bold = True
+                run.font.color.rgb = RGBColor(180, 0, 0)
+                run.font.size = Pt(11)
+                p2 = doc.add_paragraph()
+                p2.paragraph_format.left_indent = Inches(0.3)
+                p2.add_run(rev.original_text)
+
+                doc.add_paragraph()
+
+                # 修订后
+                p = doc.add_paragraph()
+                run = p.add_run("✅ 修订建议：")
+                run.bold = True
+                run.font.color.rgb = RGBColor(0, 128, 0)
+                run.font.size = Pt(11)
+                p2 = doc.add_paragraph()
+                p2.paragraph_format.left_indent = Inches(0.3)
+                p2.add_run(rev.revised_text)
+
+                doc.add_paragraph()
+
+                # 修改理由
+                p = doc.add_paragraph()
+                run = p.add_run("💡 修改理由：")
+                run.bold = True
+                p.add_run(rev.explanation)
+
+        # ── 页脚免责声明 ──
         doc.add_paragraph()
-        p = doc.add_paragraph()
-        run = p.add_run("⚠️ 免责声明: 本修订由 AI 辅助生成，不构成正式法律意见，需专业律师复核确认后方可使用。")
-        run.font.color.rgb = RGBColor(255, 0, 0)
-        run.italic = True
+        doc.add_paragraph("——" * 20)
+        footer = doc.add_paragraph()
+        footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = footer.add_run(
+            "本报告由「合同卫士」AI 审查系统自动生成 | 生成时间："
+            + __import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M")
+        )
+        run.font.color.rgb = RGBColor(128, 128, 128)
+        run.font.size = Pt(9)
 
         # 保存到字节流
         try:

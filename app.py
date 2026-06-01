@@ -15,6 +15,7 @@ logger_manager.initialize(log_dir="logs", enable_json_log=True)
 import atexit
 import os
 import socket
+import threading
 
 from src.agent_loop import AgentLoop
 from src.chat_memory import ChatMemory
@@ -27,102 +28,103 @@ from src.redliner import Redliner
 from src.report import ReportGenerator
 from src.risk_engine import RiskEngine
 from src.security import SecurityPreprocessor
-from src.task_runner import TaskRunner
 from src.ui.layout import create_ui
 from src.vector_store import VectorStore
 
-# 初始化反馈存储目录
-try:
-    from src.feedback_store import get_feedback_store
 
-    get_feedback_store()
-except Exception as e:
-    logger_manager.warning(f"反馈存储初始化失败: {e}")
+def create_app():
+    """
+    工厂函数：初始化所有模块并返回 Gradio 应用
 
+    将初始化逻辑封装为函数，便于测试和多入口复用。
+    """
+    # 初始化反馈存储目录
+    try:
+        from src.feedback_store import get_feedback_store
 
-# ============================================
-# 配置
-# ============================================
+        get_feedback_store()
+    except Exception as e:
+        logger_manager.warning(f"反馈存储初始化失败: {e}")
 
-# 使用集中式配置管理
-settings = get_settings()
-llm_config = get_llm_config()
-paths_config = get_paths_config()
+    # ============================================
+    # 配置
+    # ============================================
 
-MAX_FILE_SIZE_MB = settings.max_file_size_mb
+    settings = get_settings()
+    _ = get_llm_config()
+    paths_config = get_paths_config()
 
-# 转换为字符串路径（兼容现有模块）
-rules_path = str(paths_config["rules_path"])
-kb_path = str(paths_config["kb_path"])
-playbooks_dir = str(paths_config["playbooks_dir"])
+    max_file_size_mb = settings.max_file_size_mb
 
+    rules_path = str(paths_config["rules_path"])
+    kb_path = str(paths_config["kb_path"])
+    playbooks_dir = str(paths_config["playbooks_dir"])
 
-# ============================================
-# 模块初始化（依赖注入）
-# ============================================
+    # ============================================
+    # 模块初始化（依赖注入）
+    # ============================================
 
-parser = DocumentParser()
-security = SecurityPreprocessor()
-vector_store = VectorStore()
+    parser = DocumentParser()
+    security = SecurityPreprocessor()
+    vector_store = VectorStore()
 
-try:
-    vector_store.initialize()
-    print(f"✅ 向量库初始化完成，当前条目数: {vector_store.get_entry_count()}")
-except Exception as e:
-    print(f"⚠️ 向量库初始化失败: {e}，将在首次检索时重试")
+    try:
+        vector_store.initialize()
+        print(f"✅ 向量库初始化完成，当前条目数: {vector_store.get_entry_count()}")
+    except Exception as e:
+        print(f"⚠️ 向量库初始化失败: {e}，将在首次检索时重试")
 
-risk_engine = RiskEngine(rules_path=rules_path, playbooks_dir=playbooks_dir, vector_store=vector_store)
-legal_matcher = LegalMatcher(kb_path=kb_path, vector_store=vector_store)
-report_gen = ReportGenerator()
-redliner = Redliner()
-playbook_manager = PlaybookManager(playbooks_dir)
-chat_memory = ChatMemory()
-task_runner = TaskRunner(timeout=300)
+    risk_engine = RiskEngine(rules_path=rules_path, playbooks_dir=playbooks_dir, vector_store=vector_store)
+    legal_matcher = LegalMatcher(kb_path=kb_path, vector_store=vector_store)
+    report_gen = ReportGenerator()
+    redliner = Redliner()
+    playbook_manager = PlaybookManager(playbooks_dir)
+    chat_memory = ChatMemory()
 
+    # LLM 客户端单例（线程安全）
+    _cached_llm_client = None
+    _llm_lock = threading.Lock()
 
-_cached_llm_client = None
+    def llm_client_factory():
+        nonlocal _cached_llm_client
+        if _cached_llm_client is None:
+            with _llm_lock:
+                if _cached_llm_client is None:
+                    cfg = get_llm_config()
+                    _cached_llm_client = LLMClient(api_key=cfg["api_key"], api_base=cfg["api_base"], model=cfg["model"])
+        return _cached_llm_client
 
+    def _cleanup_llm_client():
+        if _cached_llm_client is not None:
+            _cached_llm_client.close()
 
-def llm_client_factory():
-    global _cached_llm_client
-    if _cached_llm_client is None:
-        cfg = get_llm_config()
-        _cached_llm_client = LLMClient(api_key=cfg["api_key"], api_base=cfg["api_base"], model=cfg["model"])
-    return _cached_llm_client
+    atexit.register(_cleanup_llm_client)
 
+    agent_loop = AgentLoop(
+        chat_memory=chat_memory,
+        parser=parser,
+        security=security,
+        risk_engine=risk_engine,
+        legal_matcher=legal_matcher,
+        report_gen=report_gen,
+        redliner=redliner,
+        llm_client_factory=llm_client_factory,
+    )
 
-def _cleanup_llm_client():
-    if _cached_llm_client is not None:
-        _cached_llm_client.close()
+    # ============================================
+    # 创建界面
+    # ============================================
 
+    app = create_ui(
+        agent_loop=agent_loop,
+        playbook_manager=playbook_manager,
+        legal_matcher=legal_matcher,
+        llm_client_factory=llm_client_factory,
+        max_file_size_mb=max_file_size_mb,
+    )
 
-atexit.register(_cleanup_llm_client)
+    return app
 
-
-agent_loop = AgentLoop(
-    chat_memory=chat_memory,
-    parser=parser,
-    security=security,
-    risk_engine=risk_engine,
-    legal_matcher=legal_matcher,
-    report_gen=report_gen,
-    redliner=redliner,
-    llm_client_factory=llm_client_factory,
-)
-
-
-# ============================================
-# 创建界面 & 启动
-# ============================================
-
-app = create_ui(
-    agent_loop=agent_loop,
-    playbook_manager=playbook_manager,
-    legal_matcher=legal_matcher,
-    llm_client_factory=llm_client_factory,
-    llm_api_key=llm_config["api_key"],
-    max_file_size_mb=MAX_FILE_SIZE_MB,
-)
 
 if __name__ == "__main__":
 
@@ -140,4 +142,6 @@ if __name__ == "__main__":
     server_name = "0.0.0.0" if is_hf_space else "127.0.0.1"
     port = 7860 if is_hf_space else _find_free_port(7860, 7865)
     print(f"[启动] 请访问: http://localhost:{port}")
+
+    app = create_app()
     app.launch(server_name=server_name, server_port=port, share=False)

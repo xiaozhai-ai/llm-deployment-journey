@@ -30,7 +30,7 @@ Write-Host "[配置] 最大文件大小: $env:MAX_FILE_SIZE_MB MB" -ForegroundCo
 Write-Host ""
 
 Write-Host "[启动] 正在启动法务审查 Agent..." -ForegroundColor Yellow
-Write-Host "[提示] 启动后请访问 http://localhost:7860" -ForegroundColor Yellow
+Write-Host "[提示] 启动后请访问控制台显示的地址（端口范围 7860-7865）" -ForegroundColor Yellow
 Write-Host ""
 
 # 切换到脚本所在目录

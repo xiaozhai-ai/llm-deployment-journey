@@ -11,7 +11,7 @@ import json
 import random
 import time
 
-import requests
+import httpx
 
 from src.config import get_llm_config
 from src.exceptions import (
@@ -44,13 +44,24 @@ class LLMClient:
 
         self.headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
-        # 复用 TCP 连接，减少高频调用时的连接建立开销
-        self._session = requests.Session()
-        self._session.headers.update(self.headers)
+        # 异步客户端（用于 async 方法）
+        self._async_client = httpx.AsyncClient(
+            headers=self.headers,
+            timeout=httpx.Timeout(60.0, connect=10.0),
+        )
+        # 同步客户端（用于流式输出等同步场景）
+        self._sync_client = httpx.Client(
+            headers=self.headers,
+            timeout=httpx.Timeout(60.0, connect=10.0),
+        )
 
     def close(self):
-        """释放 TCP 连接池资源"""
-        self._session.close()
+        """释放连接资源"""
+        self._sync_client.close()
+
+    async def aclose(self):
+        """释放异步连接资源"""
+        await self._async_client.aclose()
 
     def _report_metrics(self, response_data: dict, duration_ms: float, purpose: str = ""):
         """上报 Token 消耗到 MetricsCollector"""
@@ -70,11 +81,6 @@ class LLMClient:
                     )
         except Exception as e:
             logger_manager.warning(f"Metrics 上报失败: {e}")  # 不影响主流程
-
-    async def _async_post(self, url: str, headers: dict, json_data: dict, timeout: int) -> requests.Response:
-        """在线程池中执行同步 POST 请求，避免阻塞事件循环"""
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, lambda: self._session.post(url, json=json_data, timeout=timeout))
 
     async def _retry_post(self, payload: dict, timeout: int = 60, retries: int = 2, purpose: str = "") -> dict:
         """
@@ -109,7 +115,7 @@ class LLMClient:
 
             try:
                 req_start = time.time()
-                response = await self._async_post(url, self.headers, payload, timeout=timeout)
+                response = await self._async_client.post(url, json=payload, timeout=timeout)
                 duration_ms = (time.time() - req_start) * 1000
 
                 if response.status_code == 401:
@@ -145,10 +151,10 @@ class LLMClient:
             except LLMError as e:
                 last_error = e
                 logger_manager.warning(f"{purpose}失败 (尝试 {attempt + 1}/{retries + 1}): {e}")
-            except requests.exceptions.Timeout as e:
+            except httpx.TimeoutException as e:
                 last_error = LLMTimeoutError(timeout_seconds=timeout)
                 logger_manager.warning(f"{purpose}超时 (尝试 {attempt + 1}/{retries + 1}): {e}")
-            except requests.exceptions.ConnectionError as e:
+            except httpx.ConnectError as e:
                 last_error = LLMNetworkError()
                 logger_manager.warning(f"{purpose}网络失败 (尝试 {attempt + 1}/{retries + 1}): {e}")
             except Exception as e:
@@ -313,7 +319,7 @@ class LLMClient:
         }
 
         try:
-            with self._session.post(url, json=payload, timeout=timeout, stream=True) as response:
+            with self._sync_client.stream("POST", url, json=payload, timeout=timeout) as response:
                 if response.status_code == 401:
                     raise LLMAPIKeyError("API 密钥无效或已过期")
                 elif response.status_code == 429:
@@ -321,8 +327,7 @@ class LLMClient:
                 elif response.status_code >= 400:
                     raise LLMNetworkError(f"API 错误 ({response.status_code})")
 
-                response.encoding = "utf-8"
-                for line in response.iter_lines(decode_unicode=True):
+                for line in response.iter_lines():
                     if not line or not line.startswith("data: "):
                         continue
                     data = line[6:]
@@ -342,9 +347,9 @@ class LLMClient:
 
         except (LLMAPIKeyError, LLMRateLimitError):
             raise
-        except requests.exceptions.Timeout as e:
+        except httpx.TimeoutException as e:
             raise LLMTimeoutError(timeout_seconds=timeout) from e
-        except requests.exceptions.ConnectionError as e:
+        except httpx.ConnectError as e:
             raise LLMNetworkError() from e
 
     @staticmethod

@@ -11,7 +11,7 @@
 import asyncio
 import os
 import sys
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -75,11 +75,11 @@ def test_user_friendly_messages():
 
 def test_llm_client_retry():
     """测试 LLM 客户端重试机制"""
-    import requests
+    import httpx
 
     client = LLMClient(api_key="test_key", api_base="https://test.api.com/v1", model="test-model")
-    mock_post = Mock(side_effect=requests.exceptions.Timeout("Connection timed out"))
-    client._session.post = mock_post
+    mock_post = Mock(side_effect=httpx.TimeoutException("Connection timed out"))
+    client._async_client.post = mock_post
 
     with pytest.raises(LLMTimeoutError):
         asyncio.run(client.chat_completion(prompt="测试"))
@@ -90,10 +90,11 @@ def test_llm_client_api_key_error():
     """测试 API 密钥错误"""
     mock_response = Mock()
     mock_response.status_code = 401
+    mock_response.json.return_value = {"error": {"message": "Invalid API key"}}
 
     client = LLMClient(api_key="invalid_key", api_base="https://test.api.com/v1", model="test-model")
-    mock_post = Mock(return_value=mock_response)
-    client._session.post = mock_post
+    mock_post = AsyncMock(return_value=mock_response)
+    client._async_client.post = mock_post
 
     with pytest.raises(LLMAPIKeyError):
         asyncio.run(client.chat_completion(prompt="测试"))

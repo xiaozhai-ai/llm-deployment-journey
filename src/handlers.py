@@ -287,7 +287,7 @@ def _quick_reply(message: str):
     return None
 
 
-def make_chat_handler(llm_client_factory, llm_api_key: str):
+def make_chat_handler(llm_client_factory):
     """
     工厂函数：生成流式对话处理器（generator，供 Gradio Chatbot 调用）
 
@@ -330,7 +330,7 @@ def make_chat_handler(llm_client_factory, llm_api_key: str):
             return
 
         # 流式 LLM 回复
-        if llm_api_key:
+        if llm_client_factory:
             history.append({"role": "user", "content": message})
             history.append({"role": "assistant", "content": ""})
 

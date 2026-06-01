@@ -30,4 +30,4 @@ jobs:
           git config --global user.email "ci@legal-review-agent"
 
           # 用 HF CLI 推送（自动处理 LFS 和 Space 配置）
-          hf upload --repo-type space "$HF_SPACE" . --exclude ".git/*" ".github/*" "tests/*" ".env" ".env.example" "chroma_db/*" "logs/*" "uploads/*" "*.bat" "*.ps1" "docs/screenshots/*"
+          hf upload --repo-type space "$HF_SPACE" . --exclude ".git/*" ".github/*" "tests/*" ".env" "chroma_db/*" "logs/*" "uploads/*" "*.bat" "*.ps1" "docs/screenshots/*" ".pytest_cache/*" ".ruff_cache/*" "*.lnk"

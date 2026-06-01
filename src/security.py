@@ -101,14 +101,44 @@ class SecurityPreprocessor:
     def _detect_sensitive_info(self, text: str) -> list[SensitiveInfo]:
         """检测文本中的敏感信息"""
         items = []
+        seen_spans: set[tuple[int, int]] = set()
 
         for info_type, pattern in self.patterns.items():
             for match in pattern.finditer(text):
                 value = match.group()
+                span = (match.start(), match.end())
+
+                # 银行卡号需要 Luhn 校验，减少误报
+                if info_type == "银行卡号" and not self._luhn_check(value):
+                    continue
+
+                # 跳过已被更精确模式匹配的区间
+                if span in seen_spans:
+                    continue
+
                 masked = self._mask_value(value, info_type)
-                items.append(SensitiveInfo(type=info_type, position=(match.start(), match.end()), masked_value=masked))
+                items.append(SensitiveInfo(type=info_type, position=span, masked_value=masked))
+                seen_spans.add(span)
 
         return items
+
+    @staticmethod
+    def _luhn_check(number: str) -> bool:
+        """Luhn 算法校验银行卡号有效性"""
+        try:
+            digits = [int(d) for d in number]
+        except ValueError:
+            return False
+
+        checksum = 0
+        reverse_digits = digits[::-1]
+        for i, d in enumerate(reverse_digits):
+            if i % 2 == 1:
+                d *= 2
+                if d > 9:
+                    d -= 9
+            checksum += d
+        return checksum % 10 == 0
 
     def _mask_value(self, value: str, info_type: str) -> str:
         """对敏感信息进行脱敏处理"""

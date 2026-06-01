@@ -54,13 +54,12 @@ def create_ui(
     playbook_manager,
     legal_matcher,
     llm_client_factory,
-    llm_api_key: str,
     max_file_size_mb: int = 10,
 ) -> gr.Blocks:
     """创建 Gradio 界面"""
 
     review_handler = make_review_handler(agent_loop, max_file_size_mb)
-    chat_handler = make_chat_handler(llm_client_factory, llm_api_key)
+    chat_handler = make_chat_handler(llm_client_factory)
     search_handler = make_search_handler(legal_matcher)
 
     with gr.Blocks(title="法务审查 Agent v2.0", css=CUSTOM_CSS, theme=gr.themes.Soft()) as demo:

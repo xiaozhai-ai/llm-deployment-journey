@@ -269,6 +269,7 @@ class AgentLoop:
 
         if use_llm and self.llm_client_factory:
             await self._update_progress(task, TaskStage.LLM_ANALYSIS, 65, "正在进行 AI 深度分析", progress_callback)
+            llm_client = None
             try:
                 llm_client = self.llm_client_factory()
 
@@ -321,6 +322,12 @@ class AgentLoop:
                 user_msg = get_user_friendly_message(error_code)
                 llm_warnings.append(f"⚠️ {user_msg}，已使用规则分析结果")
                 self.logger.warning(f"LLM 分析降级: {e}")
+            finally:
+                if llm_client is not None:
+                    try:
+                        llm_client.close()
+                    except Exception:
+                        pass
 
         # Stage 5: 法条匹配 (80%)
         await self._update_progress(task, TaskStage.LEGAL_MATCH, 80, "正在匹配相关法条", progress_callback)

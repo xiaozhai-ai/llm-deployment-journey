@@ -6,11 +6,13 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 复制项目文件
-COPY . .
+# 创建非 root 用户
+RUN useradd -m -r appuser && mkdir -p logs config/feedback && chown -R appuser:appuser /app
 
-# 创建必要目录
-RUN mkdir -p logs config/feedback
+# 复制项目文件
+COPY --chown=appuser:appuser . .
+
+USER appuser
 
 EXPOSE 7860
 
