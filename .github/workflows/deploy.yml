@@ -1,0 +1,33 @@
+name: Deploy to HF Spaces
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip deploy]')"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install huggingface_hub
+        run: pip install huggingface_hub
+
+      - name: Push to HF Spaces
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ vars.HF_SPACE }}
+        run: |
+          git config --global user.name "CI Bot"
+          git config --global user.email "ci@legal-review-agent"
+
+          # 用 HF CLI 推送（自动处理 LFS 和 Space 配置）
+          huggingface-cli upload --repo-type space "$HF_SPACE" . --exclude ".git/*" ".github/*" "tests/*" ".env" ".env.example" "chroma_db/*" "logs/*" "uploads/*" "*.bat" "*.ps1" "docs/screenshots/*"

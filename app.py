@@ -12,6 +12,8 @@ from src.logger import logger_manager
 logger_manager.initialize(log_dir="logs", enable_json_log=True)
 
 import atexit
+import os
+import socket
 from src.config import get_settings, get_llm_config, get_paths_config
 from src.parser import DocumentParser
 from src.security import SecurityPreprocessor
@@ -44,9 +46,6 @@ settings = get_settings()
 llm_config = get_llm_config()
 paths_config = get_paths_config()
 
-LLM_API_KEY = llm_config["api_key"]
-LLM_API_BASE = llm_config["api_base"]
-LLM_MODEL = llm_config["model"]
 MAX_FILE_SIZE_MB = settings.max_file_size_mb
 
 # 转换为字符串路径（兼容现有模块）
@@ -84,7 +83,8 @@ _cached_llm_client = None
 def llm_client_factory():
     global _cached_llm_client
     if _cached_llm_client is None:
-        _cached_llm_client = LLMClient(api_key=LLM_API_KEY, api_base=LLM_API_BASE, model=LLM_MODEL)
+        cfg = get_llm_config()
+        _cached_llm_client = LLMClient(api_key=cfg["api_key"], api_base=cfg["api_base"], model=cfg["model"])
     return _cached_llm_client
 
 
@@ -117,9 +117,23 @@ app = create_ui(
     playbook_manager=playbook_manager,
     legal_matcher=legal_matcher,
     llm_client_factory=llm_client_factory,
-    llm_api_key=LLM_API_KEY,
+    llm_api_key=llm_config["api_key"],
     max_file_size_mb=MAX_FILE_SIZE_MB,
 )
 
 if __name__ == "__main__":
-    app.launch(server_name="0.0.0.0", server_port=7860, share=False)
+    def _find_free_port(start: int, end: int) -> int:
+        for port in range(start, end + 1):
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                try:
+                    s.bind(("", port))
+                    return port
+                except OSError:
+                    continue
+        raise RuntimeError(f"无法在 {start}-{end} 范围内找到可用端口")
+
+    is_hf_space = os.environ.get("SPACE_ID") is not None
+    server_name = "0.0.0.0" if is_hf_space else "127.0.0.1"
+    port = 7860 if is_hf_space else _find_free_port(7860, 7865)
+    print(f"[启动] 请访问: http://localhost:{port}")
+    app.launch(server_name=server_name, server_port=port, share=False)
