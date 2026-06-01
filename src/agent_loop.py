@@ -411,6 +411,9 @@ class AgentLoop:
         )
 
         # 构建结果
+        if not risk_result.risks:
+            llm_warnings.append("✅ 审查完成，未发现风险点（仍建议专业律师复核）")
+
         result = {
             **report_dict,
             "report_markdown": report_md,

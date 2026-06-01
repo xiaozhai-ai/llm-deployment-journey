@@ -724,8 +724,22 @@ class RiskEngine:
         "租赁", "借款", "担保", "抵押", "质押", "转让",
     ]
 
-    MIN_LEGAL_SCORE = 2  # 至少命中 2 个法律关键词才视为法律文件
-    MIN_TYPE_SCORE = 2   # 类型关键词至少命中 2 个才视为该类型
+    # 代码/技术文档信号关键词 — 命中越多越不可能是法律文件
+    CODE_SIGNAL_KEYWORDS = [
+        "import ", "def ", "class ", "return", "self.", "__init__",
+        "function", "const ", "var ", "let ", "module", "package",
+        "require(", "from ", "export", "async ", "await ",
+        "try:", "except:", "raise ", "print(", "logger",
+        "git", "dockerfile", "makefile", "readme", ".py", ".js",
+        "src/", "tests/", "config", "setup.py", "requirements",
+        "github", "npm", "pip install", "todo", "fixme", "hack",
+        "refactor", "commit", "merge", "branch", "deploy",
+    ]
+
+    MIN_LEGAL_SCORE = 5   # 至少命中 5 个法律关键词才视为法律文件
+    MIN_TYPE_SCORE = 2    # 类型关键词至少命中 2 个才视为该类型
+    MIN_LEGAL_DENSITY = 0.005  # 法律关键词至少占分词数的 0.5%
+    CODE_PENALTY_THRESHOLD = 5  # 命中 5+ 个代码信号时，提高法律阈值
 
     def detect_document_type(self, text: str) -> str:
         text_lower = text.lower()
@@ -744,13 +758,25 @@ class RiskEngine:
         best_type = max(type_scores, key=type_scores.get)
         best_score = type_scores[best_type]
 
-        # 类型关键词命中足够多 → 直接认定为该类型
-        if best_score >= self.MIN_TYPE_SCORE:
+        # 计算法律关键词命中数和密度
+        legal_hits = sum(1 for kw in self.LEGAL_SIGNAL_KEYWORDS if kw in text_lower)
+        word_count = max(len(re.findall(r'[\u4e00-\u9fff]+|[a-zA-Z]+', text_lower)), 1)
+        legal_density = legal_hits / word_count
+
+        # 计算代码信号命中数
+        code_hits = sum(1 for kw in self.CODE_SIGNAL_KEYWORDS if kw in text_lower)
+
+        # 代码信号多 → 提高法律阈值
+        effective_min = self.MIN_LEGAL_SCORE
+        if code_hits >= self.CODE_PENALTY_THRESHOLD:
+            effective_min = self.MIN_LEGAL_SCORE + code_hits  # 代码信号越多，要求越多法律关键词
+
+        # 类型关键词命中足够多 → 直接认定为该类型（但也要过密度关）
+        if best_score >= self.MIN_TYPE_SCORE and legal_density >= self.MIN_LEGAL_DENSITY:
             return best_type
 
-        # 类型关键词不足，用通用法律关键词二次确认
-        legal_score = sum(1 for kw in self.LEGAL_SIGNAL_KEYWORDS if kw in text_lower)
-        if legal_score >= self.MIN_LEGAL_SCORE:
+        # 法律关键词足够多 且 密度达标 → 通过
+        if legal_hits >= effective_min and legal_density >= self.MIN_LEGAL_DENSITY:
             return best_type if best_score > 0 else "contract"
 
         return "unknown"

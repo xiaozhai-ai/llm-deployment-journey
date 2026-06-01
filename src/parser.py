@@ -200,10 +200,13 @@ class DocumentParser:
             # 方案 0: 检测是否是 HTML 格式的 .doc 文件（WPS 保存的）
             try:
                 with open(file_path, 'rb') as f:
-                    header = f.read(200)
-                    if header.startswith(b'<html') or header.startswith(b'<HTML') or b'<!DOCTYPE' in header:
-                        logger_manager.info(f"检测到 HTML 格式的 .doc 文件: {file_path}")
-                        return self._parse_html_doc(file_path)
+                    content = f.read()
+                header = content[:200]
+                if header.startswith(b'<html') or header.startswith(b'<HTML') or b'<!DOCTYPE' in header:
+                    logger_manager.info(f"检测到 HTML 格式的 .doc 文件: {file_path}")
+                    return self._extract_text_from_html(
+                        content.decode('utf-8', errors='ignore')
+                    )
             except Exception as e:
                 logger_manager.debug(f"HTML 检测失败: {e}")
 
@@ -505,23 +508,31 @@ class DocumentParser:
         return self._parse_doc_from_ole_robust(file_path)
 
     def _parse_txt(self, file_path: str) -> str:
-        """解析 TXT 文件"""
-        try:
-            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
-                logger_manager.debug(f"成功解析 TXT 文件: {file_path}")
-                return f.read()
-        except Exception as e:
-            logger_manager.error(f"TXT 解析失败: {file_path}: {e}")
-            raise FileCorruptedError(f"TXT 文件解析失败: {e}")
+        """解析 TXT 文件（支持多编码回退）"""
+        for encoding in ['utf-8', 'gbk', 'gb2312', 'gb18030', 'latin-1']:
+            try:
+                with open(file_path, 'r', encoding=encoding) as f:
+                    text = f.read()
+                logger_manager.debug(f"成功解析 TXT 文件（编码: {encoding}）: {file_path}")
+                return text
+            except UnicodeDecodeError:
+                continue
+        # 所有编码都失败，使用 replace 模式兜底
+        with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+            logger_manager.warning(f"TXT 文件编码检测失败，使用 UTF-8 replace 模式: {file_path}")
+            return f.read()
 
     def _parse_txt_bytes(self, file_bytes: bytes) -> str:
-        """从字节流解析 TXT"""
-        try:
-            logger_manager.debug("成功解析 TXT 字节流")
-            return file_bytes.decode('utf-8', errors='replace')
-        except Exception as e:
-            logger_manager.error(f"TXT 字节流解析失败: {e}")
-            raise FileCorruptedError(f"TXT 字节流解析失败: {e}")
+        """从字节流解析 TXT（支持多编码回退）"""
+        for encoding in ['utf-8', 'gbk', 'gb2312', 'gb18030', 'latin-1']:
+            try:
+                text = file_bytes.decode(encoding)
+                logger_manager.debug(f"成功解析 TXT 字节流（编码: {encoding}）")
+                return text
+            except UnicodeDecodeError:
+                continue
+        logger_manager.warning("TXT 字节流编码检测失败，使用 UTF-8 replace 模式")
+        return file_bytes.decode('utf-8', errors='replace')
 
     def _split_clauses(self, text: str) -> List[Clause]:
         """

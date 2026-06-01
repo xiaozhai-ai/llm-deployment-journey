@@ -56,9 +56,10 @@ class Settings(BaseSettings):
         """验证配置目录是否存在"""
         config_dir = values.get('config_dir')
         if config_dir is not None:
-            path = Path(config_dir)
+            path = Path(config_dir).resolve()
             if not path.exists():
                 raise ValueError(f"配置目录不存在: {path}")
+            values['config_dir'] = path
         return values
     
     @property

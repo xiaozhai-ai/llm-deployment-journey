@@ -12,7 +12,6 @@ from dataclasses import dataclass
 class SensitiveInfo:
     """敏感信息"""
     type: str  # 类型：id_card, phone, email, bank_card, address
-    value: str  # 原始值
     position: Tuple[int, int]  # 位置 (start, end)
     masked_value: str  # 脱敏后的值
 
@@ -98,7 +97,6 @@ class SecurityPreprocessor:
                 masked = self._mask_value(value, info_type)
                 items.append(SensitiveInfo(
                     type=info_type,
-                    value=value,
                     position=(match.start(), match.end()),
                     masked_value=masked
                 ))
@@ -158,17 +156,3 @@ class SecurityPreprocessor:
             return f"⚠️ 检测到以下敏感信息类型：{'、'.join(warning_parts)}。建议在上传前进行脱敏处理。"
         return None
 
-    def check_file_type_compatibility(self, file_type: str) -> Tuple[bool, Optional[str]]:
-        """
-        检查文件类型是否适合处理
-
-        Args:
-            file_type: 文件类型（pdf, docx, txt）
-
-        Returns:
-            Tuple[是否兼容, 提示信息]
-        """
-        supported = {'pdf', 'docx', 'doc', 'txt'}
-        if file_type.lower() in supported:
-            return True, None
-        return False, f"不支持的文件类型: {file_type}，请上传 PDF、Word 或 TXT 格式文件"

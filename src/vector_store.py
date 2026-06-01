@@ -98,7 +98,8 @@ class VectorStore:
         try:
             self.collection = self.client.get_collection(self.COLLECTION_NAME)
             logger_manager.debug(f"成功加载集合: {self.COLLECTION_NAME}")
-        except Exception:
+        except Exception as e:
+            logger_manager.debug(f"集合 {self.COLLECTION_NAME} 不存在，将创建新集合: {e}")
             try:
                 self.collection = self.client.create_collection(
                     name=self.COLLECTION_NAME,
@@ -140,8 +141,8 @@ class VectorStore:
         try:
             if self.collection:
                 self.collection.delete(ids=[entry_id])
-        except Exception:
-            pass
+        except Exception as e:
+            logger_manager.debug(f"删除旧条目失败（忽略）: {e}")
 
         # 添加到向量库
         if CHROMA_AVAILABLE and self.collection:
@@ -529,7 +530,8 @@ class VectorStore:
                 if not self._term_to_ids[term]:
                     del self._term_to_ids[term]
             return True
-        except Exception:
+        except Exception as e:
+            logger_manager.debug(f"删除法条失败: {law} {article}: {e}")
             return False
 
     def get_entry_count(self) -> int:

@@ -25,7 +25,7 @@ echo [配置] LLM API Base: %LLM_API_BASE%
 echo [配置] LLM Model: %LLM_MODEL%
 echo.
 echo [启动] 正在启动...
-echo [提示] 启动后请访问 http://localhost:7860
+echo [提示] 启动后请访问控制台显示的地址
 echo [提示] 按 Ctrl+C 可以停止服务
 echo ========================================
 echo.

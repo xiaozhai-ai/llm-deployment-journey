@@ -9,6 +9,7 @@ LLM 客户端模块
 import json
 import time
 import asyncio
+import random
 from typing import Dict, List, Optional
 import requests
 
@@ -55,12 +56,6 @@ class LLMClient:
         """释放 TCP 连接池资源"""
         self._session.close()
 
-    def __del__(self):
-        try:
-            self.close()
-        except Exception:
-            pass
-
     def _report_metrics(self, response_data: Dict, duration_ms: float, purpose: str = ""):
         """上报 Token 消耗到 MetricsCollector"""
         try:
@@ -89,7 +84,7 @@ class LLMClient:
 
     async def _retry_post(self, payload: Dict, timeout: int = 60, retries: int = 2, purpose: str = "") -> Dict:
         """
-        带重试和统一错误处理的 POST 请求，返回解析后的 JSON 响应
+        带重试、随机抖动和总耗时上限的 POST 请求，返回解析后的 JSON 响应
 
         Args:
             payload: 请求体
@@ -102,12 +97,28 @@ class LLMClient:
         """
         url = f"{self.api_base}/chat/completions"
         last_error = None
+        total_budget = timeout * 2  # 总耗时上限
+        start_time = time.monotonic()
+
+        model = payload.get("model", "unknown")
+        prompt_chars = sum(
+            len(m.get("content", "")) for m in payload.get("messages", []) if isinstance(m, dict)
+        )
+        logger_manager.log_llm_request(
+            model=model,
+            prompt_length=prompt_chars,
+            temperature=payload.get("temperature", 0.1),
+            max_tokens=payload.get("max_tokens", 0),
+        )
 
         for attempt in range(retries + 1):
+            if time.monotonic() - start_time > total_budget:
+                raise LLMTimeoutError(f"总耗时超过 {total_budget}s 上限")
+
             try:
-                start_time = time.time()
+                req_start = time.time()
                 response = await self._async_post(url, self.headers, payload, timeout=timeout)
-                duration_ms = (time.time() - start_time) * 1000
+                duration_ms = (time.time() - req_start) * 1000
 
                 if response.status_code == 401:
                     raise LLMAPIKeyError("API 密钥无效或已过期")
@@ -124,6 +135,16 @@ class LLMClient:
                 response.raise_for_status()
                 result = response.json()
                 self._report_metrics(result, duration_ms, purpose=purpose)
+
+                # LLM 链路日志
+                resp_text = ""
+                if result.get("choices"):
+                    resp_text = result["choices"][0].get("message", {}).get("content", "")
+                logger_manager.log_llm_response(
+                    model=model,
+                    response_length=len(resp_text),
+                    duration_ms=duration_ms,
+                )
                 return result
 
             except LLMAPIKeyError:
@@ -145,12 +166,19 @@ class LLMClient:
                 logger_manager.error(f"{purpose}未知错误 (尝试 {attempt + 1}/{retries + 1}): {e}")
 
             if attempt < retries:
-                # Rate Limit 使用更长退避（至少 3 秒）
-                delay = 2 ** attempt
+                # Rate Limit 使用更长退避（至少 3 秒）+ 随机抖动防惊群
+                delay = 2 ** attempt + random.uniform(0, 1)
                 if isinstance(last_error, LLMRateLimitError):
-                    delay = max(delay, 3) * (attempt + 1)
+                    delay = max(delay, 3) * (attempt + 1) + random.uniform(0, 1)
                 await asyncio.sleep(delay)
 
+        elapsed = (time.monotonic() - start_time) * 1000
+        logger_manager.log_llm_response(
+            model=model,
+            response_length=0,
+            duration_ms=elapsed,
+            error=str(last_error) if last_error else "未知错误",
+        )
         raise last_error or LLMError(f"{purpose}失败")
 
     async def chat_completion(
@@ -243,6 +271,13 @@ class LLMClient:
         }
 
         result = await self._retry_post(payload, timeout=90, retries=retries, purpose="工具调用")
+
+        if not result.get("choices"):
+            raise LLMResponseParseError(
+                "工具调用返回空响应",
+                raw_response=str(result)[:200]
+            )
+
         message = result["choices"][0]["message"]
 
         parsed = {}

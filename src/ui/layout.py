@@ -14,6 +14,7 @@ from src.handlers import (
     make_search_handler,
     submit_feedback,
     show_feedback_stats,
+    load_risk_options,
 )
 
 
@@ -69,12 +70,18 @@ def create_ui(
         gr.Markdown(DISCLAIMER)
 
         with gr.Tabs():
-            _build_review_tab(review_handler)
+            review_btn = _build_review_tab(review_handler)
             _build_trace_tab()
-            _build_feedback_tab()
+            feedback_risk_dropdown = _build_feedback_tab()
             _build_chat_tab(chat_handler)
             _build_search_tab(search_handler)
             _build_freshness_tab()
+
+        # 审查完成后自动刷新人工修正的风险下拉列表
+        review_btn.click(
+            fn=load_risk_options,
+            outputs=[feedback_risk_dropdown]
+        )
 
         gr.Markdown(FOOTER)
 
@@ -162,6 +169,8 @@ def _build_review_tab(review_handler):
             outputs=[thinking_output, report_output, warning_output, tool_call_log_output, revision_output, docx_download]
         )
 
+    return review_btn
+
 
 def _build_trace_tab():
     """🔗 溯源对照"""
@@ -225,6 +234,8 @@ def _build_feedback_tab():
         )
 
         feedback_stats_btn.click(fn=show_feedback_stats, outputs=[feedback_stats_output])
+
+    return feedback_risk_dropdown
 
 
 def _build_chat_tab(chat_handler):

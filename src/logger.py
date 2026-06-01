@@ -7,13 +7,15 @@
 
 import logging
 import json
+import os
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 from typing import Optional
 from pathlib import Path
 
 
 class LogFormatter(logging.Formatter):
-    """自定义日志格式化器，支持彩色输出"""
+    """自定义日志格式化器，支持彩色输出（仅控制台使用）"""
 
     COLORS = {
         'DEBUG': '\033[36m',     # 青色
@@ -25,9 +27,12 @@ class LogFormatter(logging.Formatter):
     RESET = '\033[0m'
 
     def format(self, record):
+        original = record.levelname
         color = self.COLORS.get(record.levelname, self.RESET)
         record.levelname = f"{color}{record.levelname}{self.RESET}"
-        return super().format(record)
+        result = super().format(record)
+        record.levelname = original
+        return result
 
 
 class JSONFormatter(logging.Formatter):
@@ -35,7 +40,7 @@ class JSONFormatter(logging.Formatter):
 
     def format(self, record):
         log_entry = {
-            'timestamp': datetime.now().isoformat(),
+            'timestamp': datetime.fromtimestamp(record.created).isoformat(),
             'level': record.levelname,
             'logger': record.name,
             'message': record.getMessage(),
@@ -73,7 +78,7 @@ class LoggerManager:
             log_dir: 日志目录
             enable_json_log: 是否启用 JSON 格式日志文件
         """
-        self.log_dir = Path(log_dir)
+        self.log_dir = Path(log_dir).resolve()
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
         # 文件日志（JSON 格式）
@@ -123,9 +128,11 @@ class LoggerManager:
         return logger
 
     def _add_file_handler(self, name: str, filepath: Path, json_format: bool = False):
-        """添加文件处理器"""
+        """添加文件处理器（自动 rotation，单文件 10MB，保留 5 个）"""
         logger = logging.getLogger(f'legal_agent.{name}')
-        handler = logging.FileHandler(filepath, encoding='utf-8')
+        handler = RotatingFileHandler(
+            filepath, maxBytes=10 * 1024 * 1024, backupCount=5, encoding='utf-8'
+        )
 
         if json_format:
             handler.setFormatter(JSONFormatter())
@@ -225,67 +232,64 @@ class LoggerManager:
 
     # ===== LLM 推理链路日志 =====
 
+    @staticmethod
+    def _extra(event: str, **fields) -> dict:
+        """构建 extra 字典，自动注入 process_id"""
+        data = {'event': event, 'pid': os.getpid()}
+        data.update(fields)
+        return {'extra_data': data}
+
     def log_llm_request(
         self,
         model: str,
-        prompt: str,
-        system_prompt: Optional[str] = None,
+        prompt_length: int,
         temperature: float = 0.1,
         max_tokens: int = 4000,
         request_id: Optional[str] = None
     ):
-        """记录 LLM 请求"""
+        """记录 LLM 请求（不记录 prompt 内容，防止 PII 泄露）"""
         self.llm_logger.info(
-            f"LLM 请求 [{model}]: temp={temperature}, max_tokens={max_tokens}",
-            extra={
-                'extra_data': {
-                    'event': 'llm_request',
-                    'request_id': request_id,
-                    'model': model,
-                    'system_prompt': system_prompt,
-                    'prompt_preview': prompt[:500] + '...' if len(prompt) > 500 else prompt,
-                    'prompt_length': len(prompt),
-                    'temperature': temperature,
-                    'max_tokens': max_tokens
-                }
-            }
+            f"LLM 请求 [{model}]: len={prompt_length}, temp={temperature}",
+            extra=self._extra(
+                'llm_request',
+                request_id=request_id,
+                model=model,
+                prompt_length=prompt_length,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
         )
 
     def log_llm_response(
         self,
         model: str,
-        response: str,
+        response_length: int,
         duration_ms: float,
         request_id: Optional[str] = None,
         error: Optional[str] = None
     ):
-        """记录 LLM 响应"""
+        """记录 LLM 响应（不记录 response 内容，防止 PII 泄露）"""
         if error:
             self.llm_logger.error(
                 f"LLM 响应失败 [{model}]: {error} ({duration_ms:.0f}ms)",
-                extra={
-                    'extra_data': {
-                        'event': 'llm_response_error',
-                        'request_id': request_id,
-                        'model': model,
-                        'duration_ms': duration_ms,
-                        'error': error
-                    }
-                }
+                extra=self._extra(
+                    'llm_response_error',
+                    request_id=request_id,
+                    model=model,
+                    duration_ms=duration_ms,
+                    error=error
+                )
             )
         else:
             self.llm_logger.info(
-                f"LLM 响应 [{model}]: {duration_ms:.0f}ms, {len(response)} chars",
-                extra={
-                    'extra_data': {
-                        'event': 'llm_response',
-                        'request_id': request_id,
-                        'model': model,
-                        'duration_ms': duration_ms,
-                        'response_length': len(response),
-                        'response_preview': response[:500] + '...' if len(response) > 500 else response
-                    }
-                }
+                f"LLM 响应 [{model}]: {duration_ms:.0f}ms, {response_length} chars",
+                extra=self._extra(
+                    'llm_response',
+                    request_id=request_id,
+                    model=model,
+                    duration_ms=duration_ms,
+                    response_length=response_length
+                )
             )
 
 

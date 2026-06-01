@@ -135,7 +135,8 @@ def build_trace_view() -> tuple:
     risks = review_store.get_risks(session_id)
 
     if not clauses and not risks:
-        return "请先进行文件审查", "暂无风险"
+        # 已有会话但无数据 → 审查已完成，只是没有发现风险
+        return "✅ 审查完成，未发现可溯源的条款或风险", "✅ 未检测到风险"
 
     risk_by_clause = _index_risks_by_clause(risks)
     clauses_html = _render_clauses_html(clauses, risk_by_clause)

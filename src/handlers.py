@@ -47,6 +47,7 @@ def _cleanup_temp_files():
 
 
 atexit.register(_cleanup_temp_files)
+atexit.register(lambda: _executor.shutdown(wait=False))
 for _sig in (signal.SIGTERM, signal.SIGINT):
     try:
         signal.signal(_sig, lambda s, f: (_cleanup_temp_files(), signal.default_int_handler(s, f)))
@@ -226,7 +227,7 @@ def _build_llm_messages(history: list, user_message: str) -> list:
     messages = [{"role": "system", "content": _CHAT_SYSTEM_PROMPT}]
     for msg in trimmed:
         if isinstance(msg, dict) and msg.get("role") in ("user", "assistant"):
-            messages.append({"role": msg["role"], "content": msg["content"]})
+            messages.append({"role": msg["role"], "content": msg.get("content", "")})
     messages.append({"role": "user", "content": user_message})
     return messages
 
@@ -268,9 +269,9 @@ def make_chat_handler(llm_client_factory, llm_api_key: str):
             yield history
             return
 
-        # 快速关键词回复（无需 LLM）
+        # 快速关键词回复（无需 LLM，始终优先）
         quick = _quick_reply(message)
-        if quick and not llm_api_key:
+        if quick:
             history.append({"role": "user", "content": message})
             history.append({"role": "assistant", "content": quick})
             yield history
