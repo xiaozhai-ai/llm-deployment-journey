@@ -9,15 +9,17 @@
 import asyncio
 import time
 import uuid
-from typing import Dict, List, Optional, Callable, Any
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 from src.logger import logger_manager
 
 
 class TaskStatus(Enum):
     """任务状态"""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -29,6 +31,7 @@ class TaskStatus(Enum):
 @dataclass
 class TaskProgress:
     """任务进度"""
+
     stage: str
     stage_name: str
     percentage: float
@@ -39,15 +42,16 @@ class TaskProgress:
 @dataclass
 class AsyncTask:
     """异步任务"""
+
     task_id: str
     status: TaskStatus = TaskStatus.PENDING
-    progress: Optional[TaskProgress] = None
-    result: Optional[Any] = None
-    error: Optional[str] = None
+    progress: TaskProgress | None = None
+    result: Any | None = None
+    error: str | None = None
     created_at: float = field(default_factory=time.time)
-    started_at: Optional[float] = None
-    completed_at: Optional[float] = None
-    _asyncio_task: Optional[asyncio.Task] = None
+    started_at: float | None = None
+    completed_at: float | None = None
+    _asyncio_task: asyncio.Task | None = None
 
 
 class TaskRunner:
@@ -69,7 +73,7 @@ class TaskRunner:
             timeout: 默认超时时间（秒）
             max_tasks: 最大保留任务数，超限时清理已完成任务
         """
-        self.tasks: Dict[str, AsyncTask] = {}
+        self.tasks: dict[str, AsyncTask] = {}
         self.timeout = timeout
         self._max_tasks = max_tasks
         self.logger = logger_manager
@@ -78,9 +82,9 @@ class TaskRunner:
         self,
         coro_func: Callable,
         *args,
-        progress_callback: Optional[Callable] = None,
-        timeout: Optional[int] = None,
-        **kwargs
+        progress_callback: Callable | None = None,
+        timeout: int | None = None,
+        **kwargs,
     ) -> str:
         """
         提交异步任务
@@ -103,7 +107,7 @@ class TaskRunner:
             done_statuses = {TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED, TaskStatus.TIMED_OUT}
             done_ids = [tid for tid, t in self.tasks.items() if t.status in done_statuses]
             done_ids.sort(key=lambda tid: self.tasks[tid].completed_at or 0)
-            for tid in done_ids[:len(done_ids) // 2]:
+            for tid in done_ids[: len(done_ids) // 2]:
                 del self.tasks[tid]
 
         self.tasks[task_id] = task
@@ -124,11 +128,7 @@ class TaskRunner:
 
             try:
                 # 创建进度感知的 coroutine
-                coro = coro_func(
-                    *args,
-                    progress_callback=wrapped_progress,
-                    **kwargs
-                )
+                coro = coro_func(*args, progress_callback=wrapped_progress, **kwargs)
 
                 # 执行并应用超时
                 effective_timeout = timeout or self.timeout
@@ -143,7 +143,7 @@ class TaskRunner:
 
                 return result
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 task.status = TaskStatus.TIMED_OUT
                 task.error = f"任务超时（{effective_timeout}s）"
                 task.completed_at = time.time()
@@ -173,9 +173,9 @@ class TaskRunner:
         self,
         coro_func: Callable,
         *args,
-        progress_callback: Optional[Callable] = None,
-        timeout: Optional[int] = None,
-        **kwargs
+        progress_callback: Callable | None = None,
+        timeout: int | None = None,
+        **kwargs,
     ) -> Any:
         """
         提交任务并等待结果
@@ -190,11 +190,7 @@ class TaskRunner:
         Returns:
             任务结果
         """
-        task_id = await self.submit(
-            coro_func, *args,
-            progress_callback=progress_callback,
-            timeout=timeout, **kwargs
-        )
+        task_id = await self.submit(coro_func, *args, progress_callback=progress_callback, timeout=timeout, **kwargs)
 
         task = self.tasks.get(task_id)
         if not task or not task._asyncio_task:
@@ -203,7 +199,7 @@ class TaskRunner:
         # 等待完成
         try:
             await task._asyncio_task
-        except (asyncio.TimeoutError, asyncio.CancelledError):
+        except (TimeoutError, asyncio.CancelledError):
             pass  # 已在内部处理状态
         except Exception:
             self.logger.warning(f"任务 [{task_id}] 等待期间捕获异常: {task.error}")
@@ -216,11 +212,11 @@ class TaskRunner:
 
         return task.result
 
-    def get_task(self, task_id: str) -> Optional[AsyncTask]:
+    def get_task(self, task_id: str) -> AsyncTask | None:
         """获取任务状态"""
         return self.tasks.get(task_id)
 
-    def get_task_status(self, task_id: str) -> Dict:
+    def get_task_status(self, task_id: str) -> dict:
         """获取任务状态摘要"""
         task = self.tasks.get(task_id)
         if not task:
@@ -233,11 +229,11 @@ class TaskRunner:
                 "stage": task.progress.stage if task.progress else None,
                 "stage_name": task.progress.stage_name if task.progress else None,
                 "percentage": task.progress.percentage if task.progress else 0,
-                "message": task.progress.message if task.progress else "等待中"
+                "message": task.progress.message if task.progress else "等待中",
             },
             "error": task.error,
             "created_at": task.created_at,
-            "duration": (task.completed_at or time.time()) - task.started_at if task.started_at else 0
+            "duration": (task.completed_at or time.time()) - task.started_at if task.started_at else 0,
         }
 
     async def cancel(self, task_id: str) -> bool:
@@ -263,7 +259,7 @@ class TaskRunner:
 
         return False
 
-    def list_tasks(self, limit: int = 20, status_filter: Optional[TaskStatus] = None) -> List[Dict]:
+    def list_tasks(self, limit: int = 20, status_filter: TaskStatus | None = None) -> list[dict]:
         """
         列出任务
 
@@ -289,7 +285,7 @@ class TaskRunner:
                 "progress": t.progress.percentage if t.progress else 0,
                 "message": t.progress.message if t.progress else "",
                 "created_at": t.created_at,
-                "duration": (t.completed_at or time.time()) - (t.started_at or t.created_at)
+                "duration": (t.completed_at or time.time()) - (t.started_at or t.created_at),
             }
             for t in tasks[:limit]
         ]
@@ -298,8 +294,7 @@ class TaskRunner:
         """清理过期任务"""
         now = time.time()
         expired = [
-            tid for tid, task in self.tasks.items()
-            if task.completed_at and (now - task.completed_at) > max_age_seconds
+            tid for tid, task in self.tasks.items() if task.completed_at and (now - task.completed_at) > max_age_seconds
         ]
         for tid in expired:
             del self.tasks[tid]
@@ -309,7 +304,4 @@ class TaskRunner:
     @property
     def active_count(self) -> int:
         """活跃任务数"""
-        return sum(
-            1 for t in self.tasks.values()
-            if t.status in (TaskStatus.PENDING, TaskStatus.RUNNING)
-        )
+        return sum(1 for t in self.tasks.values() if t.status in (TaskStatus.PENDING, TaskStatus.RUNNING))

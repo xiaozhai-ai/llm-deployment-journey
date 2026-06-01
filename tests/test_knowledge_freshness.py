@@ -12,14 +12,13 @@ KnowledgeFreshnessChecker 单元测试
 - 免责声明
 """
 
+from datetime import date
+
 import pytest
-from datetime import date, timedelta
-from unittest.mock import patch, MagicMock
-from pathlib import Path
 
 from src.knowledge_freshness import (
-    KnowledgeFreshnessChecker, LegalStatus,
-    FreshnessWarning, KnowledgeReport, get_freshness_checker
+    KnowledgeFreshnessChecker,
+    LegalStatus,
 )
 
 
@@ -39,7 +38,7 @@ def checker(tmp_path):
         "- law: 民法典\n  article: 第496条\n  title: 格式条款\n"
         "  content: 格式条款\n  category: 合同\n  keywords: [格式]\n"
         "  status: active\n  last_verified: '2024-01-01'\n",
-        encoding='utf-8',
+        encoding="utf-8",
     )
     case = tmp_path / "case_law.yaml"
     case.write_text(
@@ -47,23 +46,22 @@ def checker(tmp_path):
         "- title: 测试案例\n  case_number: (2025)民终1号\n"
         "  court: 最高法\n  issue: 测试\n  holding: 测试\n"
         "  keywords: [测试]\n  status: active\n  last_verified: '2025-06-01'\n",
-        encoding='utf-8',
+        encoding="utf-8",
     )
     # 清除类缓存
-    for attr in ['_cache', '_cache_key', '_cached_provisions', '_cached_cases']:
+    for attr in ["_cache", "_cache_key", "_cached_provisions", "_cached_cases"]:
         if hasattr(KnowledgeFreshnessChecker, attr):
             delattr(KnowledgeFreshnessChecker, attr)
     return KnowledgeFreshnessChecker(kb_path=str(kb), case_path=str(case))
 
 
 class TestSingletonCache:
-
     def test_same_params_returns_cached(self, tmp_path):
         kb = tmp_path / "kb.yaml"
-        kb.write_text("legal_provisions: []\n", encoding='utf-8')
+        kb.write_text("legal_provisions: []\n", encoding="utf-8")
         case = tmp_path / "c.yaml"
-        case.write_text("cases: []\n", encoding='utf-8')
-        for attr in ['_cache', '_cache_key', '_cached_provisions', '_cached_cases']:
+        case.write_text("cases: []\n", encoding="utf-8")
+        for attr in ["_cache", "_cache_key", "_cached_provisions", "_cached_cases"]:
             if hasattr(KnowledgeFreshnessChecker, attr):
                 delattr(KnowledgeFreshnessChecker, attr)
         c1 = KnowledgeFreshnessChecker(kb_path=str(kb), case_path=str(case))
@@ -73,10 +71,12 @@ class TestSingletonCache:
 
     def test_different_params_reloads(self, tmp_path):
         kb1 = tmp_path / "kb1.yaml"
-        kb1.write_text("legal_provisions:\n- law: A\n  article: 1\n  title: T\n  content: C\n  status: active\n", encoding='utf-8')
+        kb1.write_text(
+            "legal_provisions:\n- law: A\n  article: 1\n  title: T\n  content: C\n  status: active\n", encoding="utf-8"
+        )
         kb2 = tmp_path / "kb2.yaml"
-        kb2.write_text("legal_provisions: []\n", encoding='utf-8')
-        for attr in ['_cache', '_cache_key', '_cached_provisions', '_cached_cases']:
+        kb2.write_text("legal_provisions: []\n", encoding="utf-8")
+        for attr in ["_cache", "_cache_key", "_cached_provisions", "_cached_cases"]:
             if hasattr(KnowledgeFreshnessChecker, attr):
                 delattr(KnowledgeFreshnessChecker, attr)
         c1 = KnowledgeFreshnessChecker(kb_path=str(kb1))
@@ -86,7 +86,6 @@ class TestSingletonCache:
 
 
 class TestParseDate:
-
     def test_valid_date(self):
         assert KnowledgeFreshnessChecker._parse_date("2026-01-15") == date(2026, 1, 15)
 
@@ -104,7 +103,6 @@ class TestParseDate:
 
 
 class TestCheckAll:
-
     def test_counts_correct(self, checker):
         report = checker.check_all()
         assert report.total_provisions == 3
@@ -124,13 +122,13 @@ class TestCheckAll:
 
     def test_healthy_when_all_fresh(self, tmp_path):
         kb = tmp_path / "kb.yaml"
-        today = date.today().strftime('%Y-%m-%d')
+        today = date.today().strftime("%Y-%m-%d")
         kb.write_text(
             f"legal_provisions:\n- law: 测试法\n  article: 第1条\n  title: 测试\n"
             f"  content: 内容\n  status: active\n  last_verified: '{today}'\n",
-            encoding='utf-8',
+            encoding="utf-8",
         )
-        for attr in ['_cache', '_cache_key', '_cached_provisions', '_cached_cases']:
+        for attr in ["_cache", "_cache_key", "_cached_provisions", "_cached_cases"]:
             if hasattr(KnowledgeFreshnessChecker, attr):
                 delattr(KnowledgeFreshnessChecker, attr)
         c = KnowledgeFreshnessChecker(kb_path=str(kb))
@@ -139,7 +137,6 @@ class TestCheckAll:
 
 
 class TestCheckItemsReferenced:
-
     def test_finds_repealed(self, checker):
         warnings = checker.check_items_referenced(["《担保法》第8条"])
         assert any(w.status == LegalStatus.REPEALED for w in warnings)
@@ -150,18 +147,17 @@ class TestCheckItemsReferenced:
 
 
 class TestYAMLErrorHandling:
-
     def test_invalid_yaml(self, tmp_path):
         kb = tmp_path / "bad.yaml"
-        kb.write_text("{{invalid yaml", encoding='utf-8')
-        for attr in ['_cache', '_cache_key', '_cached_provisions', '_cached_cases']:
+        kb.write_text("{{invalid yaml", encoding="utf-8")
+        for attr in ["_cache", "_cache_key", "_cached_provisions", "_cached_cases"]:
             if hasattr(KnowledgeFreshnessChecker, attr):
                 delattr(KnowledgeFreshnessChecker, attr)
         c = KnowledgeFreshnessChecker(kb_path=str(kb))
         assert c.provisions == []
 
     def test_missing_file(self, tmp_path):
-        for attr in ['_cache', '_cache_key', '_cached_provisions', '_cached_cases']:
+        for attr in ["_cache", "_cache_key", "_cached_provisions", "_cached_cases"]:
             if hasattr(KnowledgeFreshnessChecker, attr):
                 delattr(KnowledgeFreshnessChecker, attr)
         c = KnowledgeFreshnessChecker(kb_path=str(tmp_path / "nonexistent.yaml"))
@@ -169,7 +165,6 @@ class TestYAMLErrorHandling:
 
 
 class TestFormatAndDisclaimer:
-
     def test_format_report(self, checker):
         report = checker.check_all()
         text = checker.format_report_for_display(report)

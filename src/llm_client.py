@@ -6,36 +6,35 @@ LLM 客户端模块
 增强版：统一异常处理 + 自动重试机制
 """
 
-import json
-import time
 import asyncio
+import json
 import random
-from typing import Dict, List, Optional
+import time
+
 import requests
 
+from src.config import get_llm_config
 from src.exceptions import (
-    LLMError, LLMAPIKeyError, LLMTimeoutError, LLMRateLimitError,
-    LLMNetworkError, LLMResponseParseError
+    LLMAPIKeyError,
+    LLMError,
+    LLMNetworkError,
+    LLMRateLimitError,
+    LLMResponseParseError,
+    LLMTimeoutError,
 )
 from src.logger import logger_manager
-from src.config import get_llm_config
 
 
 class LLMClient:
     """LLM API 客户端（OpenAI 兼容格式）"""
 
-    def __init__(
-        self,
-        api_key: Optional[str] = None,
-        api_base: Optional[str] = None,
-        model: Optional[str] = None
-    ):
+    def __init__(self, api_key: str | None = None, api_base: str | None = None, model: str | None = None):
         # 从配置模块获取默认配置
         config = get_llm_config()
-        
+
         # 允许传入参数覆盖配置
         self.api_key = api_key or config["api_key"]
-        self.api_base = (api_base or config["api_base"]).rstrip('/')
+        self.api_base = (api_base or config["api_base"]).rstrip("/")
         self.model = model or config["model"]
 
         if not self.api_key:
@@ -43,10 +42,7 @@ class LLMClient:
         if not self.api_base:
             self.api_base = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
-        self.headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
+        self.headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
         # 复用 TCP 连接，减少高频调用时的连接建立开销
         self._session = requests.Session()
@@ -56,12 +52,13 @@ class LLMClient:
         """释放 TCP 连接池资源"""
         self._session.close()
 
-    def _report_metrics(self, response_data: Dict, duration_ms: float, purpose: str = ""):
+    def _report_metrics(self, response_data: dict, duration_ms: float, purpose: str = ""):
         """上报 Token 消耗到 MetricsCollector"""
         try:
             usage = response_data.get("usage", {})
             if usage:
                 from src.metrics import get_current_collector
+
                 collector = get_current_collector()
                 if collector:
                     collector.record_llm_call(
@@ -69,20 +66,17 @@ class LLMClient:
                         prompt_tokens=usage.get("prompt_tokens", 0),
                         completion_tokens=usage.get("completion_tokens", 0),
                         duration_ms=duration_ms,
-                        purpose=purpose
+                        purpose=purpose,
                     )
         except Exception as e:
             logger_manager.warning(f"Metrics 上报失败: {e}")  # 不影响主流程
 
-    async def _async_post(self, url: str, headers: Dict, json_data: Dict, timeout: int) -> requests.Response:
+    async def _async_post(self, url: str, headers: dict, json_data: dict, timeout: int) -> requests.Response:
         """在线程池中执行同步 POST 请求，避免阻塞事件循环"""
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
-            None,
-            lambda: self._session.post(url, json=json_data, timeout=timeout)
-        )
+        return await loop.run_in_executor(None, lambda: self._session.post(url, json=json_data, timeout=timeout))
 
-    async def _retry_post(self, payload: Dict, timeout: int = 60, retries: int = 2, purpose: str = "") -> Dict:
+    async def _retry_post(self, payload: dict, timeout: int = 60, retries: int = 2, purpose: str = "") -> dict:
         """
         带重试、随机抖动和总耗时上限的 POST 请求，返回解析后的 JSON 响应
 
@@ -101,9 +95,7 @@ class LLMClient:
         start_time = time.monotonic()
 
         model = payload.get("model", "unknown")
-        prompt_chars = sum(
-            len(m.get("content", "")) for m in payload.get("messages", []) if isinstance(m, dict)
-        )
+        prompt_chars = sum(len(m.get("content", "")) for m in payload.get("messages", []) if isinstance(m, dict))
         logger_manager.log_llm_request(
             model=model,
             prompt_length=prompt_chars,
@@ -123,9 +115,7 @@ class LLMClient:
                 if response.status_code == 401:
                     raise LLMAPIKeyError("API 密钥无效或已过期")
                 elif response.status_code == 404:
-                    raise LLMNetworkError(
-                        f"API 端点不存在 (404)，请检查 LLM_API_BASE 配置是否正确: {url}"
-                    )
+                    raise LLMNetworkError(f"API 端点不存在 (404)，请检查 LLM_API_BASE 配置是否正确: {url}")
                 elif response.status_code == 429:
                     # Rate Limit 可重试，不直接 raise
                     raise LLMRateLimitError("API 调用频率超限，请稍后重试")
@@ -167,7 +157,7 @@ class LLMClient:
 
             if attempt < retries:
                 # Rate Limit 使用更长退避（至少 3 秒）+ 随机抖动防惊群
-                delay = 2 ** attempt + random.uniform(0, 1)
+                delay = 2**attempt + random.uniform(0, 1)
                 if isinstance(last_error, LLMRateLimitError):
                     delay = max(delay, 3) * (attempt + 1) + random.uniform(0, 1)
                 await asyncio.sleep(delay)
@@ -184,11 +174,11 @@ class LLMClient:
     async def chat_completion(
         self,
         prompt: str = "",
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         temperature: float = 0.1,
         max_tokens: int = 3000,
-        messages: Optional[List[Dict]] = None,
-        retries: int = 2
+        messages: list[dict] | None = None,
+        retries: int = 2,
     ) -> str:
         """
         调用聊天模型（简单模式）
@@ -217,7 +207,7 @@ class LLMClient:
             "model": self.model,
             "messages": final_messages,
             "temperature": temperature,
-            "max_tokens": max_tokens
+            "max_tokens": max_tokens,
         }
 
         result = await self._retry_post(payload, timeout=60, retries=retries, purpose="通用对话")
@@ -233,12 +223,12 @@ class LLMClient:
 
     async def chat_completion_with_tools(
         self,
-        messages: List[Dict],
-        tools: List[Dict],
+        messages: list[dict],
+        tools: list[dict],
         temperature: float = 0.1,
         max_tokens: int = 3000,
-        retries: int = 2
-    ) -> Dict:
+        retries: int = 2,
+    ) -> dict:
         """
         调用聊天模型（支持工具调用）
 
@@ -267,16 +257,13 @@ class LLMClient:
             "tools": tools,
             "tool_choice": "auto",
             "temperature": temperature,
-            "max_tokens": max_tokens
+            "max_tokens": max_tokens,
         }
 
         result = await self._retry_post(payload, timeout=90, retries=retries, purpose="工具调用")
 
         if not result.get("choices"):
-            raise LLMResponseParseError(
-                "工具调用返回空响应",
-                raw_response=str(result)[:200]
-            )
+            raise LLMResponseParseError("工具调用返回空响应", raw_response=str(result)[:200])
 
         message = result["choices"][0]["message"]
 
@@ -285,11 +272,13 @@ class LLMClient:
         if message.get("tool_calls"):
             tool_calls = []
             for tc in message["tool_calls"]:
-                tool_calls.append({
-                    "id": tc.get("id", ""),
-                    "name": tc["function"]["name"],
-                    "arguments": self._parse_tool_arguments(tc["function"]["arguments"])
-                })
+                tool_calls.append(
+                    {
+                        "id": tc.get("id", ""),
+                        "name": tc["function"]["name"],
+                        "arguments": self._parse_tool_arguments(tc["function"]["arguments"]),
+                    }
+                )
             parsed["tool_calls"] = tool_calls
 
         if message.get("content"):
@@ -298,11 +287,7 @@ class LLMClient:
         return parsed
 
     def stream_chat_completion_sync(
-        self,
-        messages: List[Dict],
-        temperature: float = 0.7,
-        max_tokens: int = 800,
-        timeout: int = 30
+        self, messages: list[dict], temperature: float = 0.7, max_tokens: int = 800, timeout: int = 30
     ):
         """
         同步流式聊天（SSE），直接 yield 每个 token。
@@ -324,14 +309,11 @@ class LLMClient:
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
-            "stream": True
+            "stream": True,
         }
 
         try:
-            with self._session.post(
-                url, json=payload,
-                timeout=timeout, stream=True
-            ) as response:
+            with self._session.post(url, json=payload, timeout=timeout, stream=True) as response:
                 if response.status_code == 401:
                     raise LLMAPIKeyError("API 密钥无效或已过期")
                 elif response.status_code == 429:
@@ -360,13 +342,13 @@ class LLMClient:
 
         except (LLMAPIKeyError, LLMRateLimitError):
             raise
-        except requests.exceptions.Timeout:
-            raise LLMTimeoutError(timeout_seconds=timeout)
-        except requests.exceptions.ConnectionError:
-            raise LLMNetworkError()
+        except requests.exceptions.Timeout as e:
+            raise LLMTimeoutError(timeout_seconds=timeout) from e
+        except requests.exceptions.ConnectionError as e:
+            raise LLMNetworkError() from e
 
     @staticmethod
-    def _parse_tool_arguments(arguments_str: str) -> Dict:
+    def _parse_tool_arguments(arguments_str: str) -> dict:
         """解析工具调用参数"""
         if isinstance(arguments_str, dict):
             return arguments_str

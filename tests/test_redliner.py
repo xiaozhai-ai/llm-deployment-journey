@@ -11,17 +11,16 @@ Redliner 单元测试
 
 import io
 import json
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
-from dataclasses import dataclass, field
-from typing import List, Optional
 
-from src.redliner import Redliner, ClauseRevision, RevisionDocument
-
+from src.redliner import ClauseRevision, Redliner
 
 # ============================================
 # 测试用数据
 # ============================================
+
 
 def _make_revision(**kwargs):
     defaults = dict(
@@ -33,7 +32,7 @@ def _make_revision(**kwargs):
         risk_id="R1",
         risk_name="违约责任缺失",
         explanation="补充违约金条款",
-        html_diff=""
+        html_diff="",
     )
     defaults.update(kwargs)
     return ClauseRevision(**defaults)
@@ -48,8 +47,8 @@ def redliner():
 # HTML 差异对比
 # ============================================
 
-class TestHtmlDiff:
 
+class TestHtmlDiff:
     def test_diff_shows_additions(self, redliner):
         html = redliner._generate_html_diff("原条款", "原条款\n新增内容")
         assert "diff-added" in html
@@ -74,8 +73,8 @@ class TestHtmlDiff:
 # 完整 HTML 对比报告
 # ============================================
 
-class TestFullHtmlDiff:
 
+class TestFullHtmlDiff:
     def test_no_revisions(self, redliner):
         html = redliner._generate_full_html_diff("原文", [])
         assert "无需修订" in html
@@ -93,13 +92,13 @@ class TestFullHtmlDiff:
         assert "&lt;script&gt;" in html
 
     def test_xss_in_clause_title(self, redliner):
-        rev = _make_revision(clause_title='<img onerror=alert(1)>')
+        rev = _make_revision(clause_title="<img onerror=alert(1)>")
         html = redliner._generate_full_html_diff("原文", [rev])
         assert "<img" not in html
         assert "&lt;img" in html
 
     def test_xss_in_original_text(self, redliner):
-        rev = _make_revision(original_text='<b>加粗</b>')
+        rev = _make_revision(original_text="<b>加粗</b>")
         html = redliner._generate_full_html_diff("原文", [rev])
         assert "<b>" not in html
 
@@ -113,21 +112,22 @@ class TestFullHtmlDiff:
 # DOCX 生成
 # ============================================
 
-class TestDocxGeneration:
 
+class TestDocxGeneration:
     def test_generates_valid_docx(self, redliner):
         rev = _make_revision()
         docx_bytes = redliner.generate_docx_with_revisions("原文", [rev])
         assert isinstance(docx_bytes, bytes)
         assert len(docx_bytes) > 0
         # DOCX 文件头 (PK zip)
-        assert docx_bytes[:2] == b'PK'
+        assert docx_bytes[:2] == b"PK"
 
     def test_docx_contains_disclaimer(self, redliner):
         rev = _make_revision()
         docx_bytes = redliner.generate_docx_with_revisions("原文", [rev])
         # 解析 DOCX 验证免责声明
         from docx import Document
+
         doc = Document(io.BytesIO(docx_bytes))
         full_text = "\n".join(p.text for p in doc.paragraphs)
         assert "非 Word 原生修订标记" in full_text
@@ -137,6 +137,7 @@ class TestDocxGeneration:
         rev = _make_revision()
         docx_bytes = redliner.generate_docx_with_revisions("原文", [rev])
         from docx import Document
+
         doc = Document(io.BytesIO(docx_bytes))
         full_text = "\n".join(p.text for p in doc.paragraphs)
         assert "原条款" in full_text
@@ -153,14 +154,15 @@ class TestDocxGeneration:
 # JSON 解析容错
 # ============================================
 
-class TestJsonParsing:
 
+class TestJsonParsing:
     def test_valid_json_response(self, redliner):
         """LLM 返回标准 JSON 时应正常解析"""
         # 通过 _llm_generate_revision 的内部逻辑验证
         # 这里测试 JSON 提取逻辑本身
         response = '{"revised_text": "修订后文本", "explanation": "理由"}'
         import re
+
         json_match = re.search(r'\{[^{}]*"revised_text"[^{}]*\}', response)
         assert json_match is not None
         data = json.loads(json_match.group())
@@ -170,6 +172,7 @@ class TestJsonParsing:
         """LLM 在 JSON 前后附加说明文字时应正确提取"""
         response = '好的，以下是修订结果：\n{"revised_text": "新条款", "explanation": "理由"}\n以上是修订。'
         import re
+
         json_match = re.search(r'\{[^{}]*"revised_text"[^{}]*\}', response)
         assert json_match is not None
         data = json.loads(json_match.group())
@@ -178,6 +181,7 @@ class TestJsonParsing:
     def test_malformed_json_handled(self, redliner):
         """畸形 JSON 不应导致崩溃"""
         import re
+
         response = '{"revised_text": "未闭合'
         json_match = re.search(r'\{[^{}]*"revised_text"[^{}]*\}', response)
         if json_match:
@@ -189,8 +193,8 @@ class TestJsonParsing:
 # 修订生成（异步）
 # ============================================
 
-class TestGenerateRevisions:
 
+class TestGenerateRevisions:
     @pytest.mark.asyncio
     async def test_no_actionable_risks(self, redliner):
         """无建议的风险不生成修订"""

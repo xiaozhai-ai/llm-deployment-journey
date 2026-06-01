@@ -7,16 +7,15 @@ Gradio 界面布局
 
 import gradio as gr
 
-from src.html_renderers import build_trace_view
 from src.handlers import (
-    make_review_handler,
-    make_chat_handler,
-    make_search_handler,
-    submit_feedback,
-    show_feedback_stats,
     load_risk_options,
+    make_chat_handler,
+    make_review_handler,
+    make_search_handler,
+    show_feedback_stats,
+    submit_feedback,
 )
-
+from src.html_renderers import build_trace_view
 
 CUSTOM_CSS = """
 .disclaimer-box {
@@ -65,7 +64,6 @@ def create_ui(
     search_handler = make_search_handler(legal_matcher)
 
     with gr.Blocks(title="法务审查 Agent v2.0", css=CUSTOM_CSS, theme=gr.themes.Soft()) as demo:
-
         gr.Markdown(HEADER)
         gr.Markdown(DISCLAIMER)
 
@@ -78,10 +76,7 @@ def create_ui(
             _build_freshness_tab()
 
         # 审查完成后自动刷新人工修正的风险下拉列表
-        review_btn.click(
-            fn=load_risk_options,
-            outputs=[feedback_risk_dropdown]
-        )
+        review_btn.click(fn=load_risk_options, outputs=[feedback_risk_dropdown])
 
         gr.Markdown(FOOTER)
 
@@ -92,6 +87,7 @@ def create_ui(
 # Tab 构建函数
 # ============================================
 
+
 def _build_review_tab(review_handler):
     """📋 文件审查"""
     with gr.Tab("📋 文件审查"):
@@ -100,9 +96,7 @@ def _build_review_tab(review_handler):
                 gr.Markdown("### 📤 文件上传")
 
                 file_input = gr.File(
-                    label="上传法律文件",
-                    file_types=[".pdf", ".docx", ".doc", ".txt"],
-                    type="filepath"
+                    label="上传法律文件", file_types=[".pdf", ".docx", ".doc", ".txt"], type="filepath"
                 )
 
                 gr.Markdown("### ⚙️ 审查配置")
@@ -115,26 +109,27 @@ def _build_review_tab(review_handler):
                         ("🔒 隐私政策", "privacy_policy"),
                     ],
                     value="auto_detect",
-                    label="文件类型"
+                    label="文件类型",
                 )
 
                 playbook_input = gr.Dropdown(
-                    choices=[("🛡️ 甲方立场", "party_a"), ("⚔️ 乙方立场", "party_b"),
-                             ("⚖️ 中立审查", "neutral"), ("🔒 隐私合规专项", "privacy_compliance"),
-                             ("👷 劳动合同专项", "labor_contract")],
+                    choices=[
+                        ("🛡️ 甲方立场", "party_a"),
+                        ("⚔️ 乙方立场", "party_b"),
+                        ("⚖️ 中立审查", "neutral"),
+                        ("🔒 隐私合规专项", "privacy_compliance"),
+                        ("👷 劳动合同专项", "labor_contract"),
+                    ],
                     value="neutral",
-                    label="审查策略"
+                    label="审查策略",
                 )
 
-                use_llm = gr.Checkbox(
-                    label="启用 AI 深度分析（需要 LLM_API_KEY）",
-                    value=True
-                )
+                use_llm = gr.Checkbox(label="启用 AI 深度分析（需要 LLM_API_KEY）", value=True)
 
                 special_req = gr.Textbox(
                     label="特殊要求（可选）",
                     placeholder="例如：重点关注违约责任条款、检查是否符合《个人信息保护法》要求等",
-                    lines=3
+                    lines=3,
                 )
 
                 review_btn = gr.Button("🔍 开始审查", variant="primary", size="lg")
@@ -150,8 +145,7 @@ def _build_review_tab(review_handler):
 
             with gr.Column(scale=2):
                 thinking_output = gr.HTML(
-                    value='<div class="thinking-panel">⏳ 等待上传文件...</div>',
-                    label="🧠 AI 实时思考过程"
+                    value='<div class="thinking-panel">⏳ 等待上传文件...</div>', label="🧠 AI 实时思考过程"
                 )
                 _progress_bar = gr.Markdown("⏳ 准备就绪")
                 warning_output = gr.Textbox(label="⚠️ 警告信息", lines=3, interactive=False, visible=True)
@@ -166,7 +160,14 @@ def _build_review_tab(review_handler):
         review_btn.click(
             fn=review_handler,
             inputs=[file_input, doc_type, playbook_input, use_llm, special_req],
-            outputs=[thinking_output, report_output, warning_output, tool_call_log_output, revision_output, docx_download]
+            outputs=[
+                thinking_output,
+                report_output,
+                warning_output,
+                tool_call_log_output,
+                revision_output,
+                docx_download,
+            ],
         )
 
     return review_btn
@@ -191,11 +192,7 @@ def _build_feedback_tab():
         gr.Markdown("### 🔄 人工修正与反馈")
         gr.Markdown("如果 Agent 判断有误，请在此处修正。您的反馈将帮助 Agent 下次不再犯同样的错误。")
 
-        feedback_risk_dropdown = gr.Dropdown(
-            label="选择要修正的风险项",
-            choices=[],
-            interactive=True
-        )
+        feedback_risk_dropdown = gr.Dropdown(label="选择要修正的风险项", choices=[], interactive=True)
 
         feedback_action = gr.Radio(
             choices=[
@@ -203,22 +200,18 @@ def _build_feedback_tab():
                 ("❌ 误报（此条款无风险）", "false_positive"),
                 ("⬇️ 等级太高", "level_down"),
                 ("⬆️ 等级太低", "level_up"),
-                ("➕ 漏报（补充新风险）", "missed_risk")
+                ("➕ 漏报（补充新风险）", "missed_risk"),
             ],
             label="您的判断",
-            value="agree"
+            value="agree",
         )
 
         feedback_comment = gr.Textbox(
-            label="修正说明（可选）",
-            placeholder="例如：这是双方对等的违约责任，不存在不对等",
-            lines=3
+            label="修正说明（可选）", placeholder="例如：这是双方对等的违约责任，不存在不对等", lines=3
         )
 
         feedback_corrected_level = gr.Dropdown(
-            label="修正后的风险等级（可选）",
-            choices=["critical", "high", "medium", "low"],
-            value="medium"
+            label="修正后的风险等级（可选）", choices=["critical", "high", "medium", "low"], value="medium"
         )
 
         feedback_submit_btn = gr.Button("📤 提交修正", variant="primary")
@@ -230,7 +223,7 @@ def _build_feedback_tab():
         feedback_submit_btn.click(
             fn=submit_feedback,
             inputs=[feedback_risk_dropdown, feedback_action, feedback_comment, feedback_corrected_level],
-            outputs=[feedback_output]
+            outputs=[feedback_output],
         )
 
         feedback_stats_btn.click(fn=show_feedback_stats, outputs=[feedback_stats_output])
@@ -246,11 +239,7 @@ def _build_chat_tab(chat_handler):
         chatbot = gr.Chatbot(label="对话历史", height=400, type="messages")
 
         with gr.Row():
-            chat_input = gr.Textbox(
-                label="输入消息",
-                placeholder="例如：我该如何选择审查策略？",
-                scale=4
-            )
+            chat_input = gr.Textbox(label="输入消息", placeholder="例如：我该如何选择审查策略？", scale=4)
             chat_send = gr.Button("发送", scale=1, variant="primary")
 
         chat_clear = gr.Button("🗑️ 清空对话")
@@ -260,16 +249,8 @@ def _build_chat_tab(chat_handler):
             for updated_history in chat_handler(message, history):
                 yield updated_history, ""
 
-        chat_send.click(
-            fn=_chat_and_clear,
-            inputs=[chat_input, chatbot],
-            outputs=[chatbot, chat_input]
-        )
-        chat_input.submit(
-            fn=_chat_and_clear,
-            inputs=[chat_input, chatbot],
-            outputs=[chatbot, chat_input]
-        )
+        chat_send.click(fn=_chat_and_clear, inputs=[chat_input, chatbot], outputs=[chatbot, chat_input])
+        chat_input.submit(fn=_chat_and_clear, inputs=[chat_input, chatbot], outputs=[chatbot, chat_input])
         chat_clear.click(lambda: ("", []), outputs=[chat_input, chatbot])
 
 
@@ -278,10 +259,7 @@ def _build_search_tab(search_handler):
     with gr.Tab("📚 法规查询"):
         gr.Markdown("### 📚 法律法规知识库查询")
 
-        search_input = gr.Textbox(
-            label="搜索关键词",
-            placeholder="例如：违约责任、个人信息、格式条款"
-        )
+        search_input = gr.Textbox(label="搜索关键词", placeholder="例如：违约责任、个人信息、格式条款")
         search_btn = gr.Button("🔍 搜索", variant="primary")
         search_results = gr.Markdown(label="搜索结果")
 
@@ -298,6 +276,7 @@ def _build_freshness_tab():
 
         def check_freshness() -> str:
             from src.knowledge_freshness import get_freshness_checker
+
             checker = get_freshness_checker()
             report = checker.check_all()
             return checker.format_report_for_display(report)

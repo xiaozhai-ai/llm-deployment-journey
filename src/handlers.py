@@ -5,26 +5,31 @@
 将 UI 布局与业务逻辑解耦。
 """
 
-import os
-import atexit
-import signal
 import asyncio
+import atexit
+import os
+import signal
 import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict
 
 import gradio as gr
 
-from src.logger import logger_manager
-from src.session_store import review_store
-from src.html_renderers import format_thinking_process, format_tool_call_log
 from src.agent_loop import AgentLoop, TaskProgress
 from src.exceptions import (
-    LLMError, LLMTimeoutError, LLMNetworkError, LLMRateLimitError,
-    ParsingError, UnsupportedFormatError, FileCorruptedError,
-    get_user_friendly_message, classify_error
+    FileCorruptedError,
+    LLMError,
+    LLMNetworkError,
+    LLMRateLimitError,
+    LLMTimeoutError,
+    ParsingError,
+    UnsupportedFormatError,
+    classify_error,
+    get_user_friendly_message,
 )
+from src.html_renderers import format_thinking_process, format_tool_call_log
+from src.logger import logger_manager
+from src.session_store import review_store
 
 _executor = ThreadPoolExecutor(max_workers=4)
 
@@ -65,6 +70,7 @@ def _run_async_in_thread(coro):
 # 审查流程
 # ============================================
 
+
 async def run_review(
     file,
     document_type: str,
@@ -73,17 +79,17 @@ async def run_review(
     special_requirements: str,
     agent_loop: AgentLoop,
     max_file_size_mb: int = 10,
-    progress_callback=None
-) -> Dict:
+    progress_callback=None,
+) -> dict:
     """执行审查流程"""
     if file is None:
         raise ValueError("请先上传文件")
 
-    if hasattr(file, 'size') and file.size > max_file_size_mb * 1024 * 1024:
+    if hasattr(file, "size") and file.size > max_file_size_mb * 1024 * 1024:
         raise ValueError(f"文件大小超过限制（{max_file_size_mb}MB）")
 
     filename = file.name
-    with open(file.name, 'rb') as f:
+    with open(file.name, "rb") as f:
         file_bytes = f.read()
 
     return await agent_loop.start_review(
@@ -93,7 +99,7 @@ async def run_review(
         playbook_id=playbook_id,
         use_llm=use_llm,
         special_requirements=special_requirements,
-        progress_callback=progress_callback
+        progress_callback=progress_callback,
     )
 
 
@@ -105,12 +111,7 @@ def make_review_handler(agent_loop: AgentLoop, max_file_size_mb: int = 10):
     """
 
     def review_with_progress(
-        file,
-        document_type: str,
-        playbook_id: str,
-        use_llm: bool,
-        special_requirements: str,
-        progress=gr.Progress()
+        file, document_type: str, playbook_id: str, use_llm: bool, special_requirements: str, progress=gr.Progress()
     ):
         thinking_steps = []
         thinking_html = '<div class="thinking-panel">⏳ 正在初始化审查...</div>'
@@ -125,10 +126,14 @@ def make_review_handler(agent_loop: AgentLoop, max_file_size_mb: int = 10):
                     thinking_html = format_thinking_process(thinking_steps)
 
             return await run_review(
-                file, document_type, playbook_id, use_llm, special_requirements,
+                file,
+                document_type,
+                playbook_id,
+                use_llm,
+                special_requirements,
                 agent_loop=agent_loop,
                 max_file_size_mb=max_file_size_mb,
-                progress_callback=on_progress
+                progress_callback=on_progress,
             )
 
         yield thinking_html, "", "", "", "", None
@@ -140,10 +145,7 @@ def make_review_handler(agent_loop: AgentLoop, max_file_size_mb: int = 10):
             # 非法律文件拦截
             if result.get("status") == "not_legal_document":
                 msg = result.get("message", "该文档不是法律文件")
-                yield (
-                    '<div class="thinking-panel">⚠️ 文档类型检测：非法律文件</div>',
-                    msg, "", "", "", None
-                )
+                yield ('<div class="thinking-panel">⚠️ 文档类型检测：非法律文件</div>', msg, "", "", "", None)
                 return
 
             report_md = result.get("report_markdown", "")
@@ -164,36 +166,81 @@ def make_review_handler(agent_loop: AgentLoop, max_file_size_mb: int = 10):
                     _temp_files.add(docx_file)
 
             session_id = review_store.create_session()
-            review_store.update(session_id, {
-                "clauses": result.get("clauses", []),
-                "risks": result.get("risks", []),
-                "document_type": result.get("document_type", ""),
-                "playbook_id": result.get("playbook_id", ""),
-                "filename": result.get("document_name", ""),
-                "original_text": result.get("original_text", "")
-            })
+            review_store.update(
+                session_id,
+                {
+                    "clauses": result.get("clauses", []),
+                    "risks": result.get("risks", []),
+                    "document_type": result.get("document_type", ""),
+                    "playbook_id": result.get("playbook_id", ""),
+                    "filename": result.get("document_name", ""),
+                    "original_text": result.get("original_text", ""),
+                },
+            )
             result["_session_id"] = session_id
 
             yield thinking_html, report_md, warnings, tool_log_html, revisions_html, docx_file
 
         except UnsupportedFormatError as e:
             logger_manager.warning(f"文件格式错误: {e}")
-            yield f'<div class="thinking-panel">{get_user_friendly_message(classify_error(e))}</div>', "", "", "", "", None
+            yield (
+                f'<div class="thinking-panel">{get_user_friendly_message(classify_error(e))}</div>',
+                "",
+                "",
+                "",
+                "",
+                None,
+            )
         except FileCorruptedError as e:
             logger_manager.warning(f"文件损坏: {e}")
-            yield f'<div class="thinking-panel">{get_user_friendly_message(classify_error(e))}</div>', "", "", "", "", None
+            yield (
+                f'<div class="thinking-panel">{get_user_friendly_message(classify_error(e))}</div>',
+                "",
+                "",
+                "",
+                "",
+                None,
+            )
         except LLMTimeoutError as e:
             logger_manager.warning(f"LLM 超时: {e}")
-            yield format_thinking_process(thinking_steps), f"⚠️ {get_user_friendly_message(classify_error(e))}", "", "", "", None
+            yield (
+                format_thinking_process(thinking_steps),
+                f"⚠️ {get_user_friendly_message(classify_error(e))}",
+                "",
+                "",
+                "",
+                None,
+            )
         except LLMError as e:
             logger_manager.error(f"LLM 错误: {e}")
-            yield format_thinking_process(thinking_steps), f"⚠️ {get_user_friendly_message(classify_error(e))}", "", "", "", None
+            yield (
+                format_thinking_process(thinking_steps),
+                f"⚠️ {get_user_friendly_message(classify_error(e))}",
+                "",
+                "",
+                "",
+                None,
+            )
         except ParsingError as e:
             logger_manager.error(f"解析错误: {e}")
-            yield f'<div class="thinking-panel">{get_user_friendly_message(classify_error(e))}</div>', "", "", "", "", None
+            yield (
+                f'<div class="thinking-panel">{get_user_friendly_message(classify_error(e))}</div>',
+                "",
+                "",
+                "",
+                "",
+                None,
+            )
         except Exception as e:
             logger_manager.error(f"审查失败: {e}", exc_info=True)
-            yield f'<div class="thinking-panel">❌ 审查失败：{get_user_friendly_message(classify_error(e))}</div>', "", "", "", "", None
+            yield (
+                f'<div class="thinking-panel">❌ 审查失败：{get_user_friendly_message(classify_error(e))}</div>',
+                "",
+                "",
+                "",
+                "",
+                None,
+            )
         finally:
             # 不在此处删除临时文件：Gradio gr.File 组件在用户点击下载时才读取文件，
             # 提前删除会导致下载失败。临时文件由 atexit 的 _cleanup_temp_files 统一清理。
@@ -265,7 +312,12 @@ def make_chat_handler(llm_client_factory, llm_api_key: str):
 
         if len(message) > _MAX_CHAT_INPUT_LEN:
             history.append({"role": "user", "content": message})
-            history.append({"role": "assistant", "content": f"⚠️ 消息过长（{len(message)} 字符），请控制在 {_MAX_CHAT_INPUT_LEN} 字符以内。"})
+            history.append(
+                {
+                    "role": "assistant",
+                    "content": f"⚠️ 消息过长（{len(message)} 字符），请控制在 {_MAX_CHAT_INPUT_LEN} 字符以内。",
+                }
+            )
             yield history
             return
 
@@ -288,10 +340,7 @@ def make_chat_handler(llm_client_factory, llm_api_key: str):
 
                 accumulated = ""
                 for chunk in client.stream_chat_completion_sync(
-                    messages=llm_messages,
-                    temperature=0.7,
-                    max_tokens=800,
-                    timeout=30
+                    messages=llm_messages, temperature=0.7, max_tokens=800, timeout=30
                 ):
                     accumulated += chunk
                     history[-1] = {"role": "assistant", "content": accumulated}
@@ -299,15 +348,18 @@ def make_chat_handler(llm_client_factory, llm_api_key: str):
 
                 # 流式无内容时降级到非流式
                 if not accumulated:
-                    reply = _run_async_in_thread(client.chat_completion(
-                        messages=llm_messages, temperature=0.7, max_tokens=800
-                    ))
+                    reply = _run_async_in_thread(
+                        client.chat_completion(messages=llm_messages, temperature=0.7, max_tokens=800)
+                    )
                     history[-1] = {"role": "assistant", "content": reply}
                     yield history
 
             except LLMTimeoutError:
                 logger_manager.warning("LLM 对话超时")
-                history[-1] = {"role": "assistant", "content": "⏱️ AI 服务响应超时，请稍后重试。您可以先上传文件进行规则分析。"}
+                history[-1] = {
+                    "role": "assistant",
+                    "content": "⏱️ AI 服务响应超时，请稍后重试。您可以先上传文件进行规则分析。",
+                }
                 yield history
             except LLMRateLimitError:
                 logger_manager.warning("LLM 频率限制")
@@ -315,7 +367,10 @@ def make_chat_handler(llm_client_factory, llm_api_key: str):
                 yield history
             except (LLMNetworkError, LLMError) as e:
                 logger_manager.warning(f"LLM 对话错误: {e}")
-                history[-1] = {"role": "assistant", "content": "🌐 AI 服务暂时不可用，请稍后重试。您可以先上传文件进行规则分析。"}
+                history[-1] = {
+                    "role": "assistant",
+                    "content": "🌐 AI 服务暂时不可用，请稍后重试。您可以先上传文件进行规则分析。",
+                }
                 yield history
             except Exception as e:
                 logger_manager.error(f"对话处理异常: {e}", exc_info=True)
@@ -335,6 +390,7 @@ def make_chat_handler(llm_client_factory, llm_api_key: str):
 # ============================================
 # 人工修正反馈
 # ============================================
+
 
 def load_risk_options() -> list:
     """加载当前会话的风险列表供反馈选择"""
@@ -379,6 +435,7 @@ def submit_feedback(risk_idx, action, comment, corrected_level) -> str:
 
     try:
         from src.feedback_store import get_feedback_store
+
         store = get_feedback_store()
         store.record_correction(
             clause_id=clause_id,
@@ -389,11 +446,11 @@ def submit_feedback(risk_idx, action, comment, corrected_level) -> str:
             original_risk={
                 "name": risk.get("name", ""),
                 "risk_level": risk.get("risk_level", ""),
-                "rule_id": risk.get("rule_id", "")
+                "rule_id": risk.get("rule_id", ""),
             },
             user_action=action,
             user_comment=comment,
-            corrected_level=corrected_level if action in ("level_down", "level_up", "missed_risk") else None
+            corrected_level=corrected_level if action in ("level_down", "level_up", "missed_risk") else None,
         )
         return "✅ 修正已记录！Agent 下次遇到相似条款时会参考此反馈。"
     except Exception as e:
@@ -404,16 +461,17 @@ def show_feedback_stats() -> str:
     """显示反馈统计"""
     try:
         from src.feedback_store import get_feedback_store
+
         store = get_feedback_store()
         stats = store.get_stats()
         lines = ["### 📊 反馈统计"]
         lines.append(f"总修正记录: **{stats['total_records']}**")
         lines.append(f"误报率: **{stats['false_positive_rate']:.1%}**")
         lines.append("\n**按操作类型**: ")
-        for action, count in stats.get('by_action', {}).items():
+        for action, count in stats.get("by_action", {}).items():
             lines.append(f"- {action}: {count}")
         lines.append("\n**按风险类型**: ")
-        for risk_name, count in stats.get('by_risk_type', {}).items():
+        for risk_name, count in stats.get("by_risk_type", {}).items():
             lines.append(f"- {risk_name}: {count}")
         return "\n".join(lines)
     except Exception as e:
@@ -423,6 +481,7 @@ def show_feedback_stats() -> str:
 # ============================================
 # 法规搜索
 # ============================================
+
 
 def make_search_handler(legal_matcher):
     """工厂函数：生成法规搜索处理器"""
@@ -442,7 +501,7 @@ def make_search_handler(legal_matcher):
 
 {p.content[:200]}...
 
-> 分类: {p.category} | 关键词: {', '.join(p.keywords)}
+> 分类: {p.category} | 关键词: {", ".join(p.keywords)}
 
 ---
 """

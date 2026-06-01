@@ -25,12 +25,13 @@ def text_similarity(text1: str, text2: str, max_chars: int = 500) -> float:
 
     try:
         import Levenshtein
+
         return Levenshtein.ratio(t1, t2)
     except ImportError:
         pass
 
     def get_bigrams(text):
-        return set(text[i:i + 2] for i in range(len(text) - 1))
+        return set(text[i : i + 2] for i in range(len(text) - 1))
 
     set1 = get_bigrams(t1)
     set2 = get_bigrams(t2)

@@ -11,12 +11,8 @@ PlaybookManager 单元测试
 """
 
 import pytest
-from pathlib import Path
 
-from src.playbook_manager import (
-    PlaybookManager, Playbook, StrictnessLevel,
-    RiskWeightAdjustment
-)
+from src.playbook_manager import PlaybookManager, StrictnessLevel
 
 
 @pytest.fixture
@@ -31,14 +27,13 @@ def manager(tmp_path):
         "role: neutral\n"
         "strictness: high\n"
         "focus_areas: [测试领域]\n",
-        encoding='utf-8',
+        encoding="utf-8",
     )
     # 清除内置策略（只测试自定义加载）
     return PlaybookManager(playbooks_dir=str(pb_dir))
 
 
 class TestBuiltinPlaybooks:
-
     def test_neutral_exists(self, manager):
         pb = manager.get_playbook("neutral")
         assert pb.name == "中立审查"
@@ -64,7 +59,6 @@ class TestBuiltinPlaybooks:
 
 
 class TestCustomPlaybooks:
-
     def test_custom_loaded(self, manager):
         pb = manager.get_playbook("custom_test")
         assert pb.name == "自定义测试"
@@ -76,13 +70,12 @@ class TestCustomPlaybooks:
 
 
 class TestStrictnessFallback:
-
     def test_invalid_strictness_falls_back(self, tmp_path):
         pb_dir = tmp_path / "playbooks"
         pb_dir.mkdir()
         (pb_dir / "bad.yaml").write_text(
             "id: bad\nname: 坏的\nstrictness: super_ultra\n",
-            encoding='utf-8',
+            encoding="utf-8",
         )
         manager = PlaybookManager(playbooks_dir=str(pb_dir))
         pb = manager.get_playbook("bad")
@@ -90,7 +83,6 @@ class TestStrictnessFallback:
 
 
 class TestRiskAdjustment:
-
     def test_builtin_adjustment(self, manager):
         pb = manager.get_playbook("party_a")
         adjusted = pb.adjust_risk_level("IMBALANCE_001", "high")
@@ -103,7 +95,6 @@ class TestRiskAdjustment:
 
 
 class TestPlaybookMethods:
-
     def test_should_check_rule(self, manager):
         pb = manager.get_playbook("neutral")
         assert pb.should_check_rule("ANY_RULE") is True
@@ -113,7 +104,7 @@ class TestPlaybookMethods:
         pb_dir.mkdir()
         (pb_dir / "excl.yaml").write_text(
             "id: excl\nname: 排除\nstrictness: low\nexcluded_rules: [RULE_001]\n",
-            encoding='utf-8',
+            encoding="utf-8",
         )
         manager = PlaybookManager(playbooks_dir=str(pb_dir))
         pb = manager.get_playbook("excl")
@@ -127,10 +118,9 @@ class TestPlaybookMethods:
 
 
 class TestListPlaybooks:
-
     def test_list_returns_all(self, manager):
         items = manager.list_playbooks()
-        ids = [p['id'] for p in items]
+        ids = [p["id"] for p in items]
         assert "neutral" in ids
         assert "custom_test" in ids
 
@@ -140,7 +130,6 @@ class TestListPlaybooks:
 
 
 class TestGetPlaybookNotFound:
-
     def test_raises_key_error(self, manager):
         with pytest.raises(KeyError, match="策略不存在"):
             manager.get_playbook("nonexistent_playbook")

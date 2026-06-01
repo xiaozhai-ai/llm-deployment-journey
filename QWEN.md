@@ -63,3 +63,20 @@ ruff check src/
 | `LLM_API_KEY` | API 密钥 (必需) |
 | `LLM_API_BASE` | API URL (默认通义千问) |
 | `LLM_MODEL` | 模型名 (默认 qwen-plus) |
+
+## CI/CD 约定
+
+**每次修改代码前，必须确保以下三项全部通过：**
+
+```bash
+ruff check .          # lint 检查
+ruff format --check . # 格式检查
+pytest tests/ -q      # 全量测试
+```
+
+如有 lint 错误，先尝试 `ruff check --fix .` 自动修复，再 `ruff format .` 格式化。
+
+- CI 工作流: `.github/workflows/ci.yml` (push/PR 自动触发)
+- 部署工作流: `.github/workflows/deploy.yml` (push main → HF Spaces)
+- Lint 规则: E/W/F/I/UP/B/SIM，详见 `pyproject.toml`
+- 测试框架: pytest + pytest-asyncio，asyncio_mode=auto

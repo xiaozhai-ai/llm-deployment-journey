@@ -8,7 +8,6 @@ Session 级别审查结果存储（线程安全）
 import threading
 import time
 import uuid
-from typing import Dict
 
 
 class ReviewResultStore:
@@ -18,6 +17,7 @@ class ReviewResultStore:
     每个会话使用独立的 session_id，避免并发请求互相覆盖。
     超过 max_sessions 上限时自动淘汰最旧的会话。
     """
+
     def __init__(self, max_sessions: int = 50, max_age_seconds: int = 7200):
         self._store = {}
         self._timestamps = {}
@@ -41,7 +41,7 @@ class ReviewResultStore:
                 "document_type": "",
                 "playbook_id": "",
                 "filename": "",
-                "original_text": ""
+                "original_text": "",
             }
             self._timestamps[session_id] = time.time()
             self._latest_session_id = session_id
@@ -53,7 +53,7 @@ class ReviewResultStore:
         with self._lock:
             return self._latest_session_id or ""
 
-    def update(self, session_id: str, data: Dict):
+    def update(self, session_id: str, data: dict):
         """更新会话数据"""
         with self._lock:
             if session_id in self._store:
@@ -63,7 +63,7 @@ class ReviewResultStore:
                 self._store[session_id] = data
                 self._timestamps[session_id] = time.time()
 
-    def get(self, session_id: str) -> Dict:
+    def get(self, session_id: str) -> dict:
         """获取会话数据"""
         with self._lock:
             return self._store.get(session_id, {}).copy()
@@ -83,10 +83,7 @@ class ReviewResultStore:
     def _cleanup_expired_locked(self):
         """清理过期会话（调用者须持有 self._lock）"""
         now = time.time()
-        expired = [
-            sid for sid, ts in self._timestamps.items()
-            if now - ts > self._max_age_seconds
-        ]
+        expired = [sid for sid, ts in self._timestamps.items() if now - ts > self._max_age_seconds]
         for sid in expired:
             del self._store[sid]
             del self._timestamps[sid]

@@ -6,7 +6,7 @@
 
 import json
 import re
-from typing import Dict, Any, Optional
+from typing import Any
 
 from src.tools.base import BaseTool, ToolDefinition, ToolResult
 
@@ -34,40 +34,28 @@ class AmbiguityCheckTool(BaseTool):
             parameters={
                 "type": "object",
                 "properties": {
-                    "clause_text": {
-                        "type": "string",
-                        "description": "待检测的条款完整文本"
-                    },
+                    "clause_text": {"type": "string", "description": "待检测的条款完整文本"},
                     "context": {
                         "type": "string",
-                        "description": (
-                            "可选的合同上下文，帮助理解条款含义。"
-                            "例如合同类型、双方角色、相关条款等"
-                        )
-                    }
+                        "description": ("可选的合同上下文，帮助理解条款含义。例如合同类型、双方角色、相关条款等"),
+                    },
                 },
-                "required": ["clause_text"]
-            }
+                "required": ["clause_text"],
+            },
         )
 
-    async def execute(self, arguments: Dict[str, Any], tool_call_id: str = "") -> ToolResult:
+    async def execute(self, arguments: dict[str, Any], tool_call_id: str = "") -> ToolResult:
         clause_text = arguments.get("clause_text", "")
         context = arguments.get("context", "")
 
         if not clause_text:
             return ToolResult(
-                tool_call_id=tool_call_id,
-                tool_name=self.name,
-                success=False,
-                content="错误：条款文本不能为空"
+                tool_call_id=tool_call_id, tool_name=self.name, success=False, content="错误：条款文本不能为空"
             )
 
         if not self.llm_client:
             return ToolResult(
-                tool_call_id=tool_call_id,
-                tool_name=self.name,
-                success=False,
-                content="错误：LLM 客户端未初始化"
+                tool_call_id=tool_call_id, tool_name=self.name, success=False, content="错误：LLM 客户端未初始化"
             )
 
         prompt = self._build_prompt(clause_text, context)
@@ -77,7 +65,7 @@ class AmbiguityCheckTool(BaseTool):
                 prompt,
                 system_prompt="你是法律语言分析专家。仅返回 JSON，不要添加任何其他文字。",
                 temperature=0.1,
-                max_tokens=1000
+                max_tokens=1000,
             )
 
             result_data = self._parse_json_response(response)
@@ -86,21 +74,18 @@ class AmbiguityCheckTool(BaseTool):
                     tool_call_id=tool_call_id,
                     tool_name=self.name,
                     success=False,
-                    content="歧义分析结果解析失败：LLM 返回了无效的 JSON"
+                    content="歧义分析结果解析失败：LLM 返回了无效的 JSON",
                 )
 
             return self._format_result(tool_call_id, result_data)
 
         except Exception as e:
             return ToolResult(
-                tool_call_id=tool_call_id,
-                tool_name=self.name,
-                success=False,
-                content=f"歧义检测失败: {str(e)}"
+                tool_call_id=tool_call_id, tool_name=self.name, success=False, content=f"歧义检测失败: {str(e)}"
             )
 
     @staticmethod
-    def _build_prompt(clause_text: str, context: Optional[str] = None) -> str:
+    def _build_prompt(clause_text: str, context: str | None = None) -> str:
         """构建 LLM 提示词"""
         parts = [
             "请分析以下法律条款是否存在歧义，返回 JSON 格式结果。",
@@ -113,20 +98,20 @@ class AmbiguityCheckTool(BaseTool):
             "- 冲突风险：与其他条款或法律存在潜在冲突",
             "",
             "## 返回格式",
-            '{',
+            "{",
             '  "has_ambiguity": true/false,',
             '  "overall_clarity": "清晰/基本清晰/存在歧义/严重歧义",',
             '  "summary": "不超过50字的总体评价",',
             '  "ambiguity_points": [',
-            '    {',
+            "    {",
             '      "type": "歧义类型",',
             '      "text": "歧义文本片段",',
             '      "explanation": "歧义说明",',
             '      "risk_level": "高/中/低",',
             '      "suggestion": "修改建议"',
-            '    }',
-            '  ]',
-            '}',
+            "    }",
+            "  ]",
+            "}",
             "",
             "## 待分析条款",
             clause_text,
@@ -138,7 +123,7 @@ class AmbiguityCheckTool(BaseTool):
         return "\n".join(parts)
 
     @staticmethod
-    def _parse_json_response(response: str) -> Optional[Dict]:
+    def _parse_json_response(response: str) -> dict | None:
         """解析 LLM 返回的 JSON（健壮版本）"""
         # 尝试直接解析
         try:
@@ -148,8 +133,8 @@ class AmbiguityCheckTool(BaseTool):
 
         # 尝试提取 JSON 块（可能被 markdown 包裹）
         json_patterns = [
-            r'```(?:json)?\s*(\{[\s\S]*?\})\s*```',  # markdown 代码块
-            r'(\{[\s\S]*\})',  # 最外层花括号
+            r"```(?:json)?\s*(\{[\s\S]*?\})\s*```",  # markdown 代码块
+            r"(\{[\s\S]*\})",  # 最外层花括号
         ]
 
         for pattern in json_patterns:
@@ -163,7 +148,7 @@ class AmbiguityCheckTool(BaseTool):
         return None
 
     @staticmethod
-    def _format_result(tool_call_id: str, result_data: Dict) -> ToolResult:
+    def _format_result(tool_call_id: str, result_data: dict) -> ToolResult:
         """格式化输出结果"""
         has_ambiguity = result_data.get("has_ambiguity", False)
         clarity = result_data.get("overall_clarity", "未知")
@@ -196,5 +181,5 @@ class AmbiguityCheckTool(BaseTool):
             tool_name="check_clause_ambiguity",
             success=True,
             content="\n\n".join(output_parts),
-            metadata={"has_ambiguity": has_ambiguity, "clarity": clarity}
+            metadata={"has_ambiguity": has_ambiguity, "clarity": clarity},
         )

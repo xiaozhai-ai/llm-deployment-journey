@@ -41,22 +41,20 @@ def format_thinking_process(steps: list) -> str:
 
     html = [
         '<div class="thinking-panel">',
-        '<style>', THINKING_CSS, '</style>',
-        '<div class="thinking-header">🧠 AI 实时思考过程</div>'
+        "<style>",
+        THINKING_CSS,
+        "</style>",
+        '<div class="thinking-header">🧠 AI 实时思考过程</div>',
     ]
 
     for step in steps:
         icon, css_class = _classify_thinking_step(step)
         display_text = _esc(step[:120] + "..." if len(step) > 120 else step)
-        html.append(
-            f'<div class="thinking-step {css_class}">'
-            f'<span class="icon">{icon}</span> {display_text}'
-            f'</div>'
-        )
+        html.append(f'<div class="thinking-step {css_class}"><span class="icon">{icon}</span> {display_text}</div>')
 
     html.append('<div class="thinking-step"><span class="icon">✅</span> 审查完成</div>')
-    html.append('</div>')
-    return '\n'.join(html)
+    html.append("</div>")
+    return "\n".join(html)
 
 
 def _classify_thinking_step(step: str):
@@ -77,23 +75,19 @@ def format_tool_call_log(log_entries: list) -> str:
     if not log_entries:
         return ""
 
-    html = [
-        '<div class="tool-call-log">',
-        '<style>', TOOL_CALL_CSS, '</style>',
-        '<h4>🔧 AI 工具调用过程</h4>'
-    ]
+    html = ['<div class="tool-call-log">', "<style>", TOOL_CALL_CSS, "</style>", "<h4>🔧 AI 工具调用过程</h4>"]
 
     for entry in log_entries:
         html.append(
             f'<div class="tool-call-step">'
             f'<span class="tool-name">📡 {_esc(entry.get("tool", ""))}</span> '
-            f'→ {_esc(entry.get("status", ""))}'
+            f"→ {_esc(entry.get('status', ''))}"
             f'<br><span class="result">{_esc(entry.get("detail", "")[:150])}</span>'
-            f'</div>'
+            f"</div>"
         )
 
-    html.append('</div>')
-    return '\n'.join(html)
+    html.append("</div>")
+    return "\n".join(html)
 
 
 # ============================================
@@ -158,7 +152,7 @@ def _index_risks_by_clause(risks: list) -> dict:
 
 def _render_clauses_html(clauses: list, risk_by_clause: dict) -> str:
     """渲染条款列表 HTML（带风险高亮）"""
-    parts = ['<div class="clauses-container">', f'<style>{CLAUSES_CSS}</style>']
+    parts = ['<div class="clauses-container">', f"<style>{CLAUSES_CSS}</style>"]
 
     for clause in clauses:
         cid = clause.get("id", 0)
@@ -177,20 +171,20 @@ def _render_clauses_html(clauses: list, risk_by_clause: dict) -> str:
             parts.append(f'<span class="clause-risk-tag {tag_class}">{_esc(r.get("name", ""))}</span>')
 
         parts.append(f'<pre style="white-space:pre-wrap;margin:5px 0;font-size:0.9em;">{content}...</pre>')
-        parts.append('</div>')
+        parts.append("</div>")
 
-    parts.append('</div>')
-    return '\n'.join(parts)
+    parts.append("</div>")
+    return "\n".join(parts)
 
 
 def _render_risks_html(risks: list) -> str:
     """渲染风险列表 HTML（可点击定位）"""
-    parts = ['<div class="risks-list">', f'<style>{RISKS_CSS}</style>']
+    parts = ['<div class="risks-list">', f"<style>{RISKS_CSS}</style>"]
 
     if not risks:
-        parts.append('<p>✅ 未检测到风险</p>')
+        parts.append("<p>✅ 未检测到风险</p>")
     else:
-        parts.append(f'<h4>共 {len(risks)} 个风险点</h4>')
+        parts.append(f"<h4>共 {len(risks)} 个风险点</h4>")
         level_icons = {"critical": "🟣", "high": "🔴", "medium": "🟡", "low": "🟢"}
 
         for i, risk in enumerate(risks, 1):
@@ -200,9 +194,9 @@ def _render_risks_html(risks: list) -> str:
             cited = risk.get("cited_provisions", [])
 
             parts.append(
-                f'<div class="risk-item" onclick="document.getElementById(\'clause-{clause_id}\')?.scrollIntoView({{behavior:\'smooth\'}})">'
-                f'<strong>{icon} 风险{i}: {_esc(risk.get("name", ""))}</strong><br>'
-                f'<span>{_esc(risk.get("description", "")[:150])}...</span>'
+                f"<div class=\"risk-item\" onclick=\"document.getElementById('clause-{clause_id}')?.scrollIntoView({{behavior:'smooth'}})\">"
+                f"<strong>{icon} 风险{i}: {_esc(risk.get('name', ''))}</strong><br>"
+                f"<span>{_esc(risk.get('description', '')[:150])}...</span>"
             )
 
             if clause_title:
@@ -210,10 +204,10 @@ def _render_risks_html(risks: list) -> str:
             if cited:
                 parts.append(f'<div class="risk-meta">📚 法条: {_esc("、".join(cited[:2]))}</div>')
 
-            parts.append('</div>')
+            parts.append("</div>")
 
-    parts.append('</div>')
-    return '\n'.join(parts)
+    parts.append("</div>")
+    return "\n".join(parts)
 
 
 def _max_risk_level(risks: list) -> str:

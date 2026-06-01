@@ -4,25 +4,26 @@
 """
 
 import re
-from typing import List, Tuple, Optional
 from dataclasses import dataclass
 
 
 @dataclass
 class SensitiveInfo:
     """敏感信息"""
+
     type: str  # 类型：id_card, phone, email, bank_card, address
-    position: Tuple[int, int]  # 位置 (start, end)
+    position: tuple[int, int]  # 位置 (start, end)
     masked_value: str  # 脱敏后的值
 
 
 @dataclass
 class SecurityCheckResult:
     """安全检查结果"""
-    sensitive_items: List[SensitiveInfo]
+
+    sensitive_items: list[SensitiveInfo]
     out_of_scope: bool  # 是否超出能力范围
-    out_of_scope_reason: Optional[str] = None
-    risk_warning: Optional[str] = None  # 安全风险提示
+    out_of_scope_reason: str | None = None
+    risk_warning: str | None = None  # 安全风险提示
 
 
 class SecurityPreprocessor:
@@ -30,20 +31,30 @@ class SecurityPreprocessor:
 
     # 超出能力范围的关键字
     OUT_OF_SCOPE_KEYWORDS = [
-        "刑事", "犯罪", "刑罚", "有期徒刑", "拘役", "管制",
-        "境外法律", "外国法", "国际法", "涉外",
-        "知识产权诉讼", "专利无效",
-        "税务筹划", "避税",
+        "刑事",
+        "犯罪",
+        "刑罚",
+        "有期徒刑",
+        "拘役",
+        "管制",
+        "境外法律",
+        "外国法",
+        "国际法",
+        "涉外",
+        "知识产权诉讼",
+        "专利无效",
+        "税务筹划",
+        "避税",
     ]
 
     def __init__(self):
         # 敏感信息匹配模式
         self.patterns = {
-            "身份证号": re.compile(r'(?<!\d)(\d{17}[\dXx])(?!\d)'),
-            "手机号": re.compile(r'(?<!\d)(1[3-9]\d{9})(?!\d)'),
-            "邮箱": re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'),
-            "银行卡号": re.compile(r'(?<!\d)(\d{16,19})(?!\d)'),
-            "统一社会信用代码": re.compile(r'[0-9A-HJ-NPQRTUWXY]{2}\d{6}[0-9A-HJ-NPQRTUWXY]{10}'),
+            "身份证号": re.compile(r"(?<!\d)(\d{17}[\dXx])(?!\d)"),
+            "手机号": re.compile(r"(?<!\d)(1[3-9]\d{9})(?!\d)"),
+            "邮箱": re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"),
+            "银行卡号": re.compile(r"(?<!\d)(\d{16,19})(?!\d)"),
+            "统一社会信用代码": re.compile(r"[0-9A-HJ-NPQRTUWXY]{2}\d{6}[0-9A-HJ-NPQRTUWXY]{10}"),
         }
 
     def check_text(self, text: str) -> SecurityCheckResult:
@@ -64,10 +75,10 @@ class SecurityPreprocessor:
             sensitive_items=sensitive_items,
             out_of_scope=out_of_scope,
             out_of_scope_reason=reason,
-            risk_warning=risk_warning
+            risk_warning=risk_warning,
         )
 
-    def mask_sensitive_info(self, text: str) -> Tuple[str, List[SensitiveInfo]]:
+    def mask_sensitive_info(self, text: str) -> tuple[str, list[SensitiveInfo]]:
         """
         检测并脱敏敏感信息
 
@@ -87,7 +98,7 @@ class SecurityPreprocessor:
 
         return masked_text, sensitive_items
 
-    def _detect_sensitive_info(self, text: str) -> List[SensitiveInfo]:
+    def _detect_sensitive_info(self, text: str) -> list[SensitiveInfo]:
         """检测文本中的敏感信息"""
         items = []
 
@@ -95,30 +106,26 @@ class SecurityPreprocessor:
             for match in pattern.finditer(text):
                 value = match.group()
                 masked = self._mask_value(value, info_type)
-                items.append(SensitiveInfo(
-                    type=info_type,
-                    position=(match.start(), match.end()),
-                    masked_value=masked
-                ))
+                items.append(SensitiveInfo(type=info_type, position=(match.start(), match.end()), masked_value=masked))
 
         return items
 
     def _mask_value(self, value: str, info_type: str) -> str:
         """对敏感信息进行脱敏处理"""
         if info_type == "身份证号":
-            return value[:6] + '****' + value[-4:]
+            return value[:6] + "****" + value[-4:]
         elif info_type == "手机号":
-            return value[:3] + '****' + value[-4:]
+            return value[:3] + "****" + value[-4:]
         elif info_type == "邮箱":
-            parts = value.split('@')
-            return parts[0][:2] + '***@' + parts[1]
+            parts = value.split("@")
+            return parts[0][:2] + "***@" + parts[1]
         elif info_type == "银行卡号":
-            return value[:4] + '****' + value[-4:]
+            return value[:4] + "****" + value[-4:]
         elif info_type == "统一社会信用代码":
-            return value[:6] + '****' + value[-4:]
-        return '***'
+            return value[:6] + "****" + value[-4:]
+        return "***"
 
-    def _check_out_of_scope(self, text: str) -> Tuple[bool, Optional[str]]:
+    def _check_out_of_scope(self, text: str) -> tuple[bool, str | None]:
         """
         检查文本是否超出处理能力范围
 
@@ -133,7 +140,7 @@ class SecurityPreprocessor:
 
         return False, None
 
-    def _generate_risk_warning(self, items: List[SensitiveInfo]) -> Optional[str]:
+    def _generate_risk_warning(self, items: list[SensitiveInfo]) -> str | None:
         """生成安全风险提示"""
         if not items:
             return None
@@ -155,4 +162,3 @@ class SecurityPreprocessor:
         if warning_parts:
             return f"⚠️ 检测到以下敏感信息类型：{'、'.join(warning_parts)}。建议在上传前进行脱敏处理。"
         return None
-

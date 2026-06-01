@@ -8,87 +8,74 @@
 - 增强版：统一异常处理 + 日志记录
 """
 
-import os
-import re
 import json
-import yaml
-from typing import Dict, List, Optional, Callable, Any
+import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
-from src.playbook_manager import PlaybookManager, Playbook
-from src.vector_store import VectorStore
-from src.tools.base import ToolRegistry
-from src.tools.legal_search import LegalSearchTool
-from src.tools.case_search import CaseSearchTool
-from src.tools.ambiguity_check import AmbiguityCheckTool
-from src.tool_agent import ToolCallingAgent, AgentOutput
-from src.exceptions import (
-    LLMError, LLMTimeoutError, LLMNetworkError,
-    RiskAnalysisError, RuleLoadError
-)
-from src.logger import logger_manager
+import yaml
+
 from src.config import get_paths_config
+from src.exceptions import LLMError, LLMNetworkError, LLMTimeoutError, RiskAnalysisError, RuleLoadError
+from src.logger import logger_manager
+from src.playbook_manager import Playbook, PlaybookManager
+from src.tool_agent import AgentOutput, ToolCallingAgent
+from src.tools.ambiguity_check import AmbiguityCheckTool
+from src.tools.base import ToolRegistry
+from src.tools.case_search import CaseSearchTool
+from src.tools.legal_search import LegalSearchTool
+from src.vector_store import VectorStore
 
 
 @dataclass
 class RiskItem:
     """风险项"""
+
     id: str
     rule_id: str
     name: str
     category: str
     risk_level: str
     description: str
-    clause_position: Optional[str] = None  # 条款标题（兼容旧版）
-    clause_content_preview: Optional[str] = None
-    legal_basis: Optional[str] = None
-    suggestion: Optional[str] = None
+    clause_position: str | None = None  # 条款标题（兼容旧版）
+    clause_content_preview: str | None = None
+    legal_basis: str | None = None
+    suggestion: str | None = None
     confidence: float = 0.0
     playbook_adjusted: bool = False
-    tool_agent_output: Optional[AgentOutput] = None
-    tool_agent_conclusion: Optional[str] = None
+    tool_agent_output: AgentOutput | None = None
+    tool_agent_conclusion: str | None = None
 
     # ===== 溯源字段（v2.5 新增） =====
     clause_id: int = 0  # 对应 Clause.id，用于溯源定位
     clause_title: str = ""  # 条款标题
     clause_line_range: str = ""  # 行号范围 "第3-5行"
-    cited_provisions: List[str] = field(default_factory=list)  # 引用的法条列表
-    user_feedback: Optional[str] = None  # 用户反馈（误报/同意等）
+    cited_provisions: list[str] = field(default_factory=list)  # 引用的法条列表
+    user_feedback: str | None = None  # 用户反馈（误报/同意等）
 
 
 @dataclass
 class RiskAnalysisResult:
     """风险分析结果"""
-    risks: List[RiskItem] = field(default_factory=list)
+
+    risks: list[RiskItem] = field(default_factory=list)
     critical_count: int = 0
     high_count: int = 0
     medium_count: int = 0
     low_count: int = 0
-    summary: Optional[str] = None
+    summary: str | None = None
 
 
 class RiskEngine:
     """风险识别引擎（增强版 v2.2）"""
 
-    RISK_LEVEL_MAP = {
-        "critical": 4,
-        "high": 3,
-        "medium": 2,
-        "low": 1
-    }
+    RISK_LEVEL_MAP = {"critical": 4, "high": 3, "medium": 2, "low": 1}
 
-    RISK_LEVEL_CN = {
-        "critical": "严重",
-        "high": "高",
-        "medium": "中",
-        "low": "低"
-    }
+    RISK_LEVEL_CN = {"critical": "严重", "high": "高", "medium": "中", "low": "低"}
 
     def __init__(
-        self,
-        rules_path: Optional[str] = None,
-        playbooks_dir: Optional[str] = None,
-        vector_store: Optional[VectorStore] = None
+        self, rules_path: str | None = None, playbooks_dir: str | None = None, vector_store: VectorStore | None = None
     ):
         self.rules = []
         self.document_types = {}
@@ -123,47 +110,41 @@ class RiskEngine:
     def _load_rules(self, path: str):
         """加载风险规则"""
         try:
-            with open(path, 'r', encoding='utf-8') as f:
+            with open(path, encoding="utf-8") as f:
                 config = yaml.safe_load(f)
-            self.rules = config.get('risk_rules', [])
-            self.document_types = config.get('document_types', {})
+            self.rules = config.get("risk_rules", [])
+            self.document_types = config.get("document_types", {})
             logger_manager.info(f"成功加载 {len(self.rules)} 条风险规则")
         except FileNotFoundError:
             logger_manager.error(f"规则文件不存在: {path}")
-            raise RuleLoadError(path, f"规则文件不存在: {path}")
+            raise RuleLoadError(path, f"规则文件不存在: {path}") from None
         except yaml.YAMLError as e:
             logger_manager.error(f"规则文件 YAML 解析失败: {path}: {e}")
-            raise RuleLoadError(path, f"规则文件格式错误: {e}")
+            raise RuleLoadError(path, f"规则文件格式错误: {e}") from e
         except Exception as e:
             logger_manager.error(f"加载规则失败: {path}: {e}")
-            raise RuleLoadError(path, f"加载规则失败: {e}")
+            raise RuleLoadError(path, f"加载规则失败: {e}") from e
 
     def analyze_by_rules(
-        self,
-        text: str,
-        document_type: str = "contract",
-        playbook: Optional[Playbook] = None
+        self, text: str, document_type: str = "contract", playbook: Playbook | None = None
     ) -> RiskAnalysisResult:
         """基于规则引擎进行风险分析"""
         risks = []
 
-        applicable_rules = [
-            rule for rule in self.rules
-            if document_type in rule.get('applicable_types', [])
-        ]
+        applicable_rules = [rule for rule in self.rules if document_type in rule.get("applicable_types", [])]
 
         for rule in applicable_rules:
-            if playbook and not playbook.should_check_rule(rule['id']):
+            if playbook and not playbook.should_check_rule(rule["id"]):
                 continue
 
-            detection_type = rule.get('detection', {}).get('type', '')
+            detection_type = rule.get("detection", {}).get("type", "")
 
-            if detection_type == 'missing_clause' or rule['id'].startswith('MISSING_'):
+            if detection_type == "missing_clause" or rule["id"].startswith("MISSING_"):
                 is_missing, confidence = self._check_missing_clause(text, rule)
                 if is_missing:
                     risk = self._create_risk_from_rule(rule, confidence)
                     if playbook:
-                        adjusted_level = playbook.adjust_risk_level(rule['id'], risk.risk_level)
+                        adjusted_level = playbook.adjust_risk_level(rule["id"], risk.risk_level)
                         if adjusted_level != risk.risk_level:
                             risk.risk_level = adjusted_level
                             risk.playbook_adjusted = True
@@ -181,12 +162,12 @@ class RiskEngine:
 
         return self._count_risks(risks)
 
-    def _check_rule_match(self, text: str, rule: Dict) -> tuple:
+    def _check_rule_match(self, text: str, rule: dict) -> tuple:
         """检测非缺失类风险，返回 (matched: bool, confidence: float)"""
-        detection = rule.get('detection', {})
-        risk_keywords = detection.get('risk_keywords', [])
-        safe_keywords = detection.get('safe_keywords', [])
-        require_safe_absence = detection.get('require_safe_absence', False)
+        detection = rule.get("detection", {})
+        risk_keywords = detection.get("risk_keywords", [])
+        safe_keywords = detection.get("safe_keywords", [])
+        require_safe_absence = detection.get("require_safe_absence", False)
 
         # 兜底：无 detection 配置时从规则名称提取关键词
         if not risk_keywords:
@@ -217,11 +198,11 @@ class RiskEngine:
 
         return True, confidence
 
-    def _check_missing_clause(self, text: str, rule: Dict) -> tuple:
+    def _check_missing_clause(self, text: str, rule: dict) -> tuple:
         """检测条款缺失，返回 (is_missing: bool, confidence: float)"""
-        detection = rule.get('detection', {})
-        presence_keywords = detection.get('presence_keywords', [])
-        substance_patterns = detection.get('substance_patterns', [])
+        detection = rule.get("detection", {})
+        presence_keywords = detection.get("presence_keywords", [])
+        substance_patterns = detection.get("substance_patterns", [])
 
         if not presence_keywords:
             presence_keywords = self._fallback_keywords(rule)
@@ -257,67 +238,64 @@ class RiskEngine:
         confidence = max(0.3, 0.7 - presence_ratio * 0.3)
         return True, confidence
 
-    def _extract_keywords_from_rule(self, rule: Dict) -> List[str]:
+    def _extract_keywords_from_rule(self, rule: dict) -> list[str]:
         """从规则中提取关键词（用于法条匹配等场景）"""
-        detection = rule.get('detection', {})
+        detection = rule.get("detection", {})
 
         # 优先从 detection 配置中提取
         if detection:
             keywords = []
-            keywords.extend(detection.get('presence_keywords', []))
-            keywords.extend(detection.get('risk_keywords', []))
-            keywords.extend(detection.get('safe_keywords', []))
+            keywords.extend(detection.get("presence_keywords", []))
+            keywords.extend(detection.get("risk_keywords", []))
+            keywords.extend(detection.get("safe_keywords", []))
             if keywords:
                 return keywords
 
         return self._fallback_keywords(rule)
 
-    def _fallback_keywords(self, rule: Dict) -> List[str]:
+    def _fallback_keywords(self, rule: dict) -> list[str]:
         """从规则名称中提取关键词作为兜底"""
-        name = rule.get('name', '')
-        fallback = [w for w in re.split(r'[，、/\s]+', name) if len(w) >= 2]
+        name = rule.get("name", "")
+        fallback = [w for w in re.split(r"[，、/\s]+", name) if len(w) >= 2]
         return fallback or ([name] if name else [])
 
-    def _create_risk_from_rule(self, rule: Dict, confidence: float = 0.5) -> RiskItem:
+    def _create_risk_from_rule(self, rule: dict, confidence: float = 0.5) -> RiskItem:
         return RiskItem(
-            id=rule['id'],
-            rule_id=rule['id'],
-            name=rule['name'],
-            category=rule['category'],
-            risk_level=rule['risk_level'],
-            description=rule['description'],
-            legal_basis=rule.get('legal_basis'),
-            suggestion=rule.get('suggestion'),
-            confidence=round(confidence, 2)
+            id=rule["id"],
+            rule_id=rule["id"],
+            name=rule["name"],
+            category=rule["category"],
+            risk_level=rule["risk_level"],
+            description=rule["description"],
+            legal_basis=rule.get("legal_basis"),
+            suggestion=rule.get("suggestion"),
+            confidence=round(confidence, 2),
         )
 
-    def _count_risks(self, risks: List[RiskItem]) -> RiskAnalysisResult:
+    def _count_risks(self, risks: list[RiskItem]) -> RiskAnalysisResult:
         return RiskAnalysisResult(
             risks=risks,
-            critical_count=sum(1 for r in risks if r.risk_level == 'critical'),
-            high_count=sum(1 for r in risks if r.risk_level == 'high'),
-            medium_count=sum(1 for r in risks if r.risk_level == 'medium'),
-            low_count=sum(1 for r in risks if r.risk_level == 'low')
+            critical_count=sum(1 for r in risks if r.risk_level == "critical"),
+            high_count=sum(1 for r in risks if r.risk_level == "high"),
+            medium_count=sum(1 for r in risks if r.risk_level == "medium"),
+            low_count=sum(1 for r in risks if r.risk_level == "low"),
         )
 
     def _build_rule_summary(self, document_type: str) -> str:
         """构建规则清单摘要，用于注入 LLM prompt"""
-        applicable_rules = [
-            rule for rule in self.rules
-            if document_type in rule.get('applicable_types', [])
-        ]
+        applicable_rules = [rule for rule in self.rules if document_type in rule.get("applicable_types", [])]
         level_cn = {"critical": "严重", "high": "高", "medium": "中", "low": "低"}
         lines = []
         for rule in applicable_rules:
-            rid = rule['id']
-            name = rule['name']
-            level = level_cn.get(rule.get('risk_level', 'medium'), '中')
-            desc = rule.get('description', '')
-            basis = rule.get('legal_basis', '')
+            rid = rule["id"]
+            name = rule["name"]
+            level = level_cn.get(rule.get("risk_level", "medium"), "中")
+            desc = rule.get("description", "")
+            basis = rule.get("legal_basis", "")
             lines.append(f"- [{rid}] {name}（风险等级：{level}）— {desc} 法律依据：{basis}")
         return "\n".join(lines)
 
-    def deduplicate_risks(self, risks: List[RiskItem]) -> List[RiskItem]:
+    def deduplicate_risks(self, risks: list[RiskItem]) -> list[RiskItem]:
         """
         去重风险项
 
@@ -364,7 +342,9 @@ class RiskEngine:
                     if preview_key in existing_preview or existing_preview in preview_key:
                         found_duplicate = True
                         # 保留风险等级更高的
-                        if self.RISK_LEVEL_MAP.get(risk.risk_level, 0) > self.RISK_LEVEL_MAP.get(existing.risk_level, 0):
+                        if self.RISK_LEVEL_MAP.get(risk.risk_level, 0) > self.RISK_LEVEL_MAP.get(
+                            existing.risk_level, 0
+                        ):
                             seen[key] = risk
                         break
 
@@ -377,9 +357,9 @@ class RiskEngine:
 
     def link_risks_to_clauses(
         self,
-        risks: List[RiskItem],
-        clauses: List  # List[Clause] from parser
-    ) -> List[RiskItem]:
+        risks: list[RiskItem],
+        clauses: list,  # List[Clause] from parser
+    ) -> list[RiskItem]:
         """
         将风险项关联回原始条款（溯源）
 
@@ -397,12 +377,12 @@ class RiskEngine:
                 risk.clause_title = matched.title or f"第{matched.id}条"
                 risk.clause_position = matched.title or risk.clause_position
                 # 估算行号范围（按段落数估算）
-                line_count = matched.content.count('\n') + 1
+                line_count = matched.content.count("\n") + 1
                 risk.clause_line_range = f"约 {line_count} 行"
 
         return risks
 
-    def _find_matching_clause(self, risk: RiskItem, clauses: List) -> Optional[Any]:
+    def _find_matching_clause(self, risk: RiskItem, clauses: list) -> Any | None:
         """
         通过内容匹配找到风险对应的原始条款
 
@@ -437,9 +417,7 @@ class RiskEngine:
                     return clause
 
         # 策略4：关键词匹配（基于风险描述）
-        risk_keywords = self._extract_keywords_from_rule(
-            {"name": risk.name, "description": risk.description}
-        )
+        risk_keywords = self._extract_keywords_from_rule({"name": risk.name, "description": risk.description})
         if risk_keywords:
             best_match = None
             best_score = 0
@@ -458,8 +436,8 @@ class RiskEngine:
         text: str,
         document_type: str,
         llm_client,
-        playbook: Optional[Playbook] = None,
-        progress_callback: Optional[Callable[[Dict], None]] = None
+        playbook: Playbook | None = None,
+        progress_callback: Callable[[dict], None] | None = None,
     ) -> RiskAnalysisResult:
         """
         使用 LLM 进行深入浅出分析
@@ -483,20 +461,18 @@ class RiskEngine:
             original_count = len(segments)
             mid = len(segments) // 2
             segments = [segments[0], segments[mid], segments[-1]]
-            logger_manager.info(
-                f"文档过长（{original_count}段），仅分析首/中/末 3 段以控制成本"
-            )
+            logger_manager.info(f"文档过长（{original_count}段），仅分析首/中/末 3 段以控制成本")
 
         extra_context = ""
         role_context = ""
-        if playbook and playbook.custom_prompts.get('risk_analysis'):
-            extra_context = playbook.custom_prompts['risk_analysis']
+        if playbook and playbook.custom_prompts.get("risk_analysis"):
+            extra_context = playbook.custom_prompts["risk_analysis"]
             role_context = f"你代表{playbook.name}进行审查。"
         elif playbook:
             role_map = {
                 "party_a": "你代表甲方立场审查合同。",
                 "party_b": "你代表乙方立场审查合同。",
-                "neutral": "你保持中立立场审查合同。"
+                "neutral": "你保持中立立场审查合同。",
             }
             extra_context = role_map.get(playbook.role, "")
             role_context = extra_context
@@ -504,7 +480,7 @@ class RiskEngine:
         # 构建规则清单注入 prompt
         rule_summary = self._build_rule_summary(document_type)
 
-        all_risks: List[RiskItem] = []
+        all_risks: list[RiskItem] = []
 
         try:
             for seg_idx, segment in enumerate(segments):
@@ -530,7 +506,7 @@ class RiskEngine:
                     prompt,
                     system_prompt="你是中国法律审查助手，精通民法典、个人信息保护法等法律法规。严格按照给定的审查规则清单逐条分析，仅返回 JSON 数组。",
                     temperature=0.1,
-                    max_tokens=2000
+                    max_tokens=2000,
                 )
                 all_risks.extend(self._parse_llm_response(response))
 
@@ -551,27 +527,31 @@ class RiskEngine:
                             risk.playbook_adjusted = True
 
             # 对高风险条款进行 Tool Agent 深度审查（流式）
-            high_risks = [r for r in all_risks if r.risk_level in ('high', 'critical')
-                         and r.clause_content_preview]
+            high_risks = [r for r in all_risks if r.risk_level in ("high", "critical") and r.clause_content_preview]
 
             if high_risks:
                 tool_agent = self._get_tool_agent(llm_client)
 
                 for risk in high_risks[:3]:
                     async for event in tool_agent.analyze_stream(
-                        clause_text=risk.clause_content_preview,
-                        context=document_type,
-                        role_context=role_context
+                        clause_text=risk.clause_content_preview, context=document_type, role_context=role_context
                     ):
                         # 推送进度（包括反思事件）
-                        if progress_callback and event.type.value in ("tool_call", "tool_result", "interrupted", "reflection"):
-                            progress_callback({
-                                "type": event.type.value,
-                                "tool": event.tool_name or "自我反思",
-                                "content": event.content,
-                                "risk_name": risk.name,
-                                "step": event.step_number
-                            })
+                        if progress_callback and event.type.value in (
+                            "tool_call",
+                            "tool_result",
+                            "interrupted",
+                            "reflection",
+                        ):
+                            progress_callback(
+                                {
+                                    "type": event.type.value,
+                                    "tool": event.tool_name or "自我反思",
+                                    "content": event.content,
+                                    "risk_name": risk.name,
+                                    "step": event.step_number,
+                                }
+                            )
 
                         # 收集结论
                         if event.type.value == "conclusion" and event.is_final:
@@ -591,18 +571,14 @@ class RiskEngine:
             raise
         except Exception as e:
             logger_manager.error(f"LLM 风险分析未知错误: {e}", exc_info=True)
-            raise RiskAnalysisError(f"LLM 风险分析失败: {e}", error_code="LLM_ANALYSIS_UNKNOWN")
+            raise RiskAnalysisError(f"LLM 风险分析失败: {e}", error_code="LLM_ANALYSIS_UNKNOWN") from e
 
     def _get_tool_agent(self, llm_client) -> ToolCallingAgent:
         """创建 Tool Agent（每次新建，避免持有旧 llm_client 引用）"""
-        return ToolCallingAgent(
-            llm_client=llm_client,
-            tool_registry=self.tool_registry,
-            max_iterations=2
-        )
+        return ToolCallingAgent(llm_client=llm_client, tool_registry=self.tool_registry, max_iterations=2)
 
     @staticmethod
-    def _split_into_segments(text: str, max_length: int) -> List[str]:
+    def _split_into_segments(text: str, max_length: int) -> list[str]:
         """
         将长文档按段落/句子边界分割为多个片段
 
@@ -620,19 +596,19 @@ class RiskEngine:
             search_range = remaining[:max_length]
 
             # 优先：段落边界（双换行）
-            cut = search_range.rfind('\n\n')
+            cut = search_range.rfind("\n\n")
             if cut < max_length // 3:
                 # 次优：单换行
-                cut = search_range.rfind('\n')
+                cut = search_range.rfind("\n")
             if cut < max_length // 3:
                 # 再次：句子边界
-                cut = search_range.rfind('。')
+                cut = search_range.rfind("。")
             if cut < max_length // 3:
                 # 兜底：直接截断
                 cut = max_length
 
-            segments.append(remaining[:cut + 1])
-            remaining = remaining[cut + 1:]
+            segments.append(remaining[: cut + 1])
+            remaining = remaining[cut + 1 :]
 
         if remaining.strip():
             segments.append(remaining)
@@ -640,17 +616,13 @@ class RiskEngine:
         return segments
 
     async def analyze_clause_deep(
-        self,
-        clause_text: str,
-        llm_client,
-        context: str = "",
-        role_context: str = ""
+        self, clause_text: str, llm_client, context: str = "", role_context: str = ""
     ) -> AgentOutput:
         """对单条条款进行深度审查（非流式，向后兼容）"""
         tool_agent = self._get_tool_agent(llm_client)
         return await tool_agent.analyze(clause_text, context, role_context)
 
-    def _parse_llm_response(self, response: str) -> List[RiskItem]:
+    def _parse_llm_response(self, response: str) -> list[RiskItem]:
         """
         解析 LLM 返回的 JSON 响应
 
@@ -665,18 +637,18 @@ class RiskEngine:
             cleaned = response.strip()
 
             # 去除 ```json ... ``` 或 ``` ... ```
-            md_pattern = r'```(?:json)?\s*([\s\S]*?)```'
+            md_pattern = r"```(?:json)?\s*([\s\S]*?)```"
             md_match = re.search(md_pattern, cleaned)
             if md_match:
                 cleaned = md_match.group(1).strip()
 
             # 策略2：提取 JSON 数组
-            json_match = re.search(r'\[[\s\S]*\]', cleaned)
+            json_match = re.search(r"\[[\s\S]*\]", cleaned)
             if json_match:
                 data = json.loads(json_match.group())
             else:
                 # 策略3：尝试提取 JSON 对象（有时 LLM 会返回对象而非数组）
-                obj_match = re.search(r'\{[\s\S]*\}', cleaned)
+                obj_match = re.search(r"\{[\s\S]*\}", cleaned)
                 if obj_match:
                     obj = json.loads(obj_match.group())
                     # 如果对象中包含 risks 数组
@@ -696,18 +668,20 @@ class RiskEngine:
                 confidence = item.get("confidence", 0.7)
                 if not isinstance(confidence, (int, float)) or not (0 <= confidence <= 1):
                     confidence = 0.7
-                risks.append(RiskItem(
-                    id=f"LLM_RISK_{i+1:03d}",
-                    rule_id="LLM_ANALYSIS",
-                    name=str(item.get("name", "未知风险"))[:100],
-                    category=str(item.get("category", "其他风险"))[:50],
-                    risk_level=risk_level,
-                    description=str(item.get("description", "")),
-                    clause_content_preview=str(item.get("clause_preview", ""))[:200],
-                    legal_basis=item.get("legal_basis") or None,
-                    suggestion=item.get("suggestion") or None,
-                    confidence=round(float(confidence), 2)
-                ))
+                risks.append(
+                    RiskItem(
+                        id=f"LLM_RISK_{i + 1:03d}",
+                        rule_id="LLM_ANALYSIS",
+                        name=str(item.get("name", "未知风险"))[:100],
+                        category=str(item.get("category", "其他风险"))[:50],
+                        risk_level=risk_level,
+                        description=str(item.get("description", "")),
+                        clause_content_preview=str(item.get("clause_preview", ""))[:200],
+                        legal_basis=item.get("legal_basis") or None,
+                        suggestion=item.get("suggestion") or None,
+                        confidence=round(float(confidence), 2),
+                    )
+                )
         except json.JSONDecodeError as e:
             logger_manager.error(f"LLM JSON 解析失败: {e}, 原始响应: {response[:200]}...")
         except Exception as e:
@@ -716,28 +690,95 @@ class RiskEngine:
 
     # 通用法律文件关键词（任一命中即视为法律文件）
     LEGAL_SIGNAL_KEYWORDS = [
-        "合同", "协议", "甲方", "乙方", "丙方", "当事人", "签约",
-        "条款", "违约", "赔偿", "仲裁", "诉讼", "管辖", "解除",
-        "隐私政策", "个人信息", "用户协议", "服务条款", "保密",
-        "知识产权", "许可", "授权", "法律", "法规", "法院",
-        "裁定", "判决", "起诉", "应诉", "代理", "委托",
-        "租赁", "借款", "担保", "抵押", "质押", "转让",
+        "合同",
+        "协议",
+        "甲方",
+        "乙方",
+        "丙方",
+        "当事人",
+        "签约",
+        "条款",
+        "违约",
+        "赔偿",
+        "仲裁",
+        "诉讼",
+        "管辖",
+        "解除",
+        "隐私政策",
+        "个人信息",
+        "用户协议",
+        "服务条款",
+        "保密",
+        "知识产权",
+        "许可",
+        "授权",
+        "法律",
+        "法规",
+        "法院",
+        "裁定",
+        "判决",
+        "起诉",
+        "应诉",
+        "代理",
+        "委托",
+        "租赁",
+        "借款",
+        "担保",
+        "抵押",
+        "质押",
+        "转让",
     ]
 
     # 代码/技术文档信号关键词 — 命中越多越不可能是法律文件
     CODE_SIGNAL_KEYWORDS = [
-        "import ", "def ", "class ", "return", "self.", "__init__",
-        "function", "const ", "var ", "let ", "module", "package",
-        "require(", "from ", "export", "async ", "await ",
-        "try:", "except:", "raise ", "print(", "logger",
-        "git", "dockerfile", "makefile", "readme", ".py", ".js",
-        "src/", "tests/", "config", "setup.py", "requirements",
-        "github", "npm", "pip install", "todo", "fixme", "hack",
-        "refactor", "commit", "merge", "branch", "deploy",
+        "import ",
+        "def ",
+        "class ",
+        "return",
+        "self.",
+        "__init__",
+        "function",
+        "const ",
+        "var ",
+        "let ",
+        "module",
+        "package",
+        "require(",
+        "from ",
+        "export",
+        "async ",
+        "await ",
+        "try:",
+        "except:",
+        "raise ",
+        "print(",
+        "logger",
+        "git",
+        "dockerfile",
+        "makefile",
+        "readme",
+        ".py",
+        ".js",
+        "src/",
+        "tests/",
+        "config",
+        "setup.py",
+        "requirements",
+        "github",
+        "npm",
+        "pip install",
+        "todo",
+        "fixme",
+        "hack",
+        "refactor",
+        "commit",
+        "merge",
+        "branch",
+        "deploy",
     ]
 
-    MIN_LEGAL_SCORE = 5   # 至少命中 5 个法律关键词才视为法律文件
-    MIN_TYPE_SCORE = 2    # 类型关键词至少命中 2 个才视为该类型
+    MIN_LEGAL_SCORE = 5  # 至少命中 5 个法律关键词才视为法律文件
+    MIN_TYPE_SCORE = 2  # 类型关键词至少命中 2 个才视为该类型
     MIN_LEGAL_DENSITY = 0.005  # 法律关键词至少占分词数的 0.5%
     CODE_PENALTY_THRESHOLD = 5  # 命中 5+ 个代码信号时，提高法律阈值
 
@@ -760,7 +801,7 @@ class RiskEngine:
 
         # 计算法律关键词命中数和密度
         legal_hits = sum(1 for kw in self.LEGAL_SIGNAL_KEYWORDS if kw in text_lower)
-        word_count = max(len(re.findall(r'[\u4e00-\u9fff]+|[a-zA-Z]+', text_lower)), 1)
+        word_count = max(len(re.findall(r"[\u4e00-\u9fff]+|[a-zA-Z]+", text_lower)), 1)
         legal_density = legal_hits / word_count
 
         # 计算代码信号命中数

@@ -3,7 +3,6 @@
 生成结构化的法律审查报告
 """
 
-from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -13,15 +12,16 @@ from src.knowledge_freshness import get_freshness_checker
 @dataclass
 class ReviewReport:
     """审查报告"""
+
     report_id: str
     document_name: str
     document_type: str
     review_time: str
-    risk_summary: Dict[str, int]
-    risks: List[Dict]
-    security_warning: Optional[str]
+    risk_summary: dict[str, int]
+    risks: list[dict]
+    security_warning: str | None
     disclaimer: str = ""
-    suggestions: List[str] = field(default_factory=list)
+    suggestions: list[str] = field(default_factory=list)
 
 
 class ReportGenerator:
@@ -41,9 +41,9 @@ class ReportGenerator:
         document_name: str,
         document_type: str,
         risk_result,  # RiskAnalysisResult
-        legal_matches: List,  # List of LegalMatch
-        security_warning: Optional[str] = None,
-        sensitive_items: Optional[List] = None
+        legal_matches: list,  # List of LegalMatch
+        security_warning: str | None = None,
+        sensitive_items: list | None = None,
     ) -> str:
         """
         生成完整的审查报告（Markdown 格式）
@@ -60,7 +60,7 @@ class ReportGenerator:
             Markdown 格式的报告
         """
         report_id = f"LR-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        review_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        review_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         parts = []
 
@@ -88,17 +88,17 @@ class ReportGenerator:
         # 免责声明
         parts.append(self._generate_disclaimer())
 
-        return '\n\n'.join(parts)
+        return "\n\n".join(parts)
 
     def generate_report_dict(
         self,
         document_name: str,
         document_type: str,
         risk_result,
-        legal_matches: List,
-        security_warning: Optional[str] = None,
-        sensitive_items: Optional[List] = None
-    ) -> Dict:
+        legal_matches: list,
+        security_warning: str | None = None,
+        sensitive_items: list | None = None,
+    ) -> dict:
         """
         生成结构化的报告字典（用于 API 返回）
 
@@ -112,12 +112,14 @@ class ReportGenerator:
                 "name": risk.name,
                 "category": risk.category,
                 "risk_level": risk.risk_level,
-                "risk_level_cn": {"critical": "严重", "high": "高", "medium": "中", "low": "低"}.get(risk.risk_level, "中"),
+                "risk_level_cn": {"critical": "严重", "high": "高", "medium": "中", "low": "低"}.get(
+                    risk.risk_level, "中"
+                ),
                 "description": risk.description,
                 "clause_position": risk.clause_position,
                 "legal_basis": risk.legal_basis,
                 "suggestion": risk.suggestion,
-                "confidence": risk.confidence
+                "confidence": risk.confidence,
             }
             risks_list.append(risk_dict)
 
@@ -125,17 +127,17 @@ class ReportGenerator:
             "report_id": f"LR-{datetime.now().strftime('%Y%m%d%H%M%S')}",
             "document_name": document_name,
             "document_type": document_type,
-            "review_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "review_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "risk_summary": {
                 "high": risk_result.high_count,
                 "medium": risk_result.medium_count,
                 "low": risk_result.low_count,
-                "total": len(risk_result.risks)
+                "total": len(risk_result.risks),
             },
             "risks": risks_list,
             "security_warning": security_warning,
             "disclaimer": self.DISCLAIMER,
-            "timeliness_disclaimer": get_freshness_checker().get_freshness_disclaimer()
+            "timeliness_disclaimer": get_freshness_checker().get_freshness_disclaimer(),
         }
 
     def generate_freshness_section(self) -> str:
@@ -155,7 +157,7 @@ class ReportGenerator:
         lines.append(f"案例总数: {report.total_cases}")
 
         if report.warnings:
-            critical_warnings = [w for w in report.warnings if w.severity == 'critical']
+            critical_warnings = [w for w in report.warnings if w.severity == "critical"]
             if critical_warnings:
                 lines.append(f"\n🔴 发现 {len(critical_warnings)} 条严重时效性警告:\n")
                 for w in critical_warnings[:5]:
@@ -166,12 +168,7 @@ class ReportGenerator:
 
     def _generate_header(self, report_id: str, doc_name: str, doc_type: str, review_time: str) -> str:
         """生成报告头部"""
-        type_names = {
-            "contract": "合同",
-            "agreement": "协议",
-            "privacy_policy": "隐私政策",
-            "unknown": "法律文件"
-        }
+        type_names = {"contract": "合同", "agreement": "协议", "privacy_policy": "隐私政策", "unknown": "法律文件"}
         type_cn = type_names.get(doc_type, doc_type)
 
         return f"""# 📋 法务审查报告
@@ -183,7 +180,7 @@ class ReportGenerator:
 | 文件类型 | {type_cn} |
 | 审查时间 | {review_time} |"""
 
-    def _generate_security_section(self, warning: str, sensitive_items: Optional[List] = None) -> str:
+    def _generate_security_section(self, warning: str, sensitive_items: list | None = None) -> str:
         """生成安全提示部分"""
         section = f"""## 🔒 安全提示
 
@@ -234,7 +231,9 @@ class ReportGenerator:
 
         for i, risk in enumerate(sorted_risks, 1):
             level_icon = {"critical": "🟣", "high": "🔴", "medium": "🟡", "low": "🟢"}.get(risk.risk_level, "⚪")
-            level_cn = {"critical": "严重风险", "high": "高风险", "medium": "中风险", "low": "低风险"}.get(risk.risk_level, "未知")
+            level_cn = {"critical": "严重风险", "high": "高风险", "medium": "中风险", "low": "低风险"}.get(
+                risk.risk_level, "未知"
+            )
 
             risk_section = f"""
 ### {level_icon} 风险 {i}: {risk.name}
@@ -268,7 +267,7 @@ class ReportGenerator:
 
             parts.append(risk_section)
 
-        return '\n'.join(parts)
+        return "\n".join(parts)
 
     def _generate_suggestions(self, risk_result) -> str:
         """生成建议汇总"""
@@ -303,4 +302,4 @@ class ReportGenerator:
 {timeliness_disclaimer}
 
 ---
-*本报告由 AI 辅助生成，审查时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*"""
+*本报告由 AI 辅助生成，审查时间：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}*"""

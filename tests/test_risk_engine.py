@@ -13,13 +13,13 @@ RiskEngine 单元测试
 - 文档类型检测
 """
 
-import os
 import json
-import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import MagicMock
 
-from src.risk_engine import RiskEngine, RiskItem, RiskAnalysisResult
+import pytest
+
 from src.exceptions import RuleLoadError
+from src.risk_engine import RiskAnalysisResult, RiskEngine, RiskItem
 
 
 @pytest.fixture
@@ -87,7 +87,7 @@ risk_rules:
         - "法律另有规定"
 """
     rules_file = tmp_path / "legal_rules.yaml"
-    rules_file.write_text(rules_content, encoding='utf-8')
+    rules_file.write_text(rules_content, encoding="utf-8")
 
     # 创建 playbooks 目录（空）
     playbooks_dir = tmp_path / "playbooks"
@@ -113,18 +113,19 @@ def mock_playbook():
 # 规则加载
 # ============================================
 
+
 class TestRuleLoading:
     """规则加载测试"""
 
     def test_load_rules_success(self, engine):
         """成功加载规则"""
         assert len(engine.rules) == 3
-        assert engine.rules[0]['id'] == "MISSING_001"
+        assert engine.rules[0]["id"] == "MISSING_001"
 
     def test_load_rules_document_types(self, engine):
         """加载文档类型配置"""
         assert "contract" in engine.document_types
-        assert engine.document_types['contract']['name'] == "合同"
+        assert engine.document_types["contract"]["name"] == "合同"
 
     def test_load_rules_file_not_found(self, tmp_path):
         """规则文件不存在应抛出 RuleLoadError"""
@@ -137,7 +138,7 @@ class TestRuleLoading:
     def test_load_rules_invalid_yaml(self, tmp_path):
         """无效 YAML 应抛出 RuleLoadError"""
         bad_file = tmp_path / "bad.yaml"
-        bad_file.write_text("{{invalid yaml", encoding='utf-8')
+        bad_file.write_text("{{invalid yaml", encoding="utf-8")
         playbooks_dir = tmp_path / "playbooks"
         playbooks_dir.mkdir()
 
@@ -148,6 +149,7 @@ class TestRuleLoading:
 # ============================================
 # 缺失条款检测
 # ============================================
+
 
 class TestMissingClauseDetection:
     """缺失条款检测测试"""
@@ -175,7 +177,7 @@ class TestMissingClauseDetection:
         text = "双方应遵守合同约定，如发生违约，另行协商。"  # 有"违约"但无实质内容
         result = engine.analyze_by_rules(text, document_type="contract")
 
-        missing_risks = [r for r in result.risks if r.id == "MISSING_001"]
+        [r for r in result.risks if r.id == "MISSING_001"]
         # 可能检测到缺失（置信度较低），也可能不检测到
         # 关键是不应崩溃
         assert isinstance(result, RiskAnalysisResult)
@@ -184,6 +186,7 @@ class TestMissingClauseDetection:
 # ============================================
 # 风险条件匹配
 # ============================================
+
 
 class TestRiskConditionMatching:
     """风险条件匹配测试"""
@@ -234,6 +237,7 @@ class TestRiskConditionMatching:
 # 置信度计算
 # ============================================
 
+
 class TestConfidenceCalculation:
     """置信度计算测试"""
 
@@ -265,6 +269,7 @@ class TestConfidenceCalculation:
 # ============================================
 # Playbook 风险等级调整
 # ============================================
+
 
 class TestPlaybookAdjustment:
     """Playbook 风险等级调整测试"""
@@ -316,6 +321,7 @@ class TestPlaybookAdjustment:
 # 风险计数
 # ============================================
 
+
 class TestRiskCounting:
     """风险计数测试"""
 
@@ -342,16 +348,31 @@ class TestRiskCounting:
 # 风险去重
 # ============================================
 
+
 class TestRiskDeduplication:
     """风险去重测试"""
 
     def test_duplicate_rule_id_deduplicated(self, engine):
         """相同 rule_id 的风险应去重"""
         risks = [
-            RiskItem(id="R1", rule_id="RULE_001", name="风险A", category="cat",
-                     risk_level="high", description="desc", confidence=0.8),
-            RiskItem(id="R2", rule_id="RULE_001", name="风险A", category="cat",
-                     risk_level="medium", description="desc", confidence=0.6),
+            RiskItem(
+                id="R1",
+                rule_id="RULE_001",
+                name="风险A",
+                category="cat",
+                risk_level="high",
+                description="desc",
+                confidence=0.8,
+            ),
+            RiskItem(
+                id="R2",
+                rule_id="RULE_001",
+                name="风险A",
+                category="cat",
+                risk_level="medium",
+                description="desc",
+                confidence=0.6,
+            ),
         ]
         result = engine.deduplicate_risks(risks)
         assert len(result) == 1
@@ -360,10 +381,24 @@ class TestRiskDeduplication:
     def test_different_rule_id_not_deduplicated(self, engine):
         """不同 rule_id 的风险不应去重"""
         risks = [
-            RiskItem(id="R1", rule_id="RULE_001", name="风险A", category="cat",
-                     risk_level="high", description="desc", confidence=0.8),
-            RiskItem(id="R2", rule_id="RULE_002", name="风险B", category="cat",
-                     risk_level="medium", description="desc", confidence=0.6),
+            RiskItem(
+                id="R1",
+                rule_id="RULE_001",
+                name="风险A",
+                category="cat",
+                risk_level="high",
+                description="desc",
+                confidence=0.8,
+            ),
+            RiskItem(
+                id="R2",
+                rule_id="RULE_002",
+                name="风险B",
+                category="cat",
+                risk_level="medium",
+                description="desc",
+                confidence=0.6,
+            ),
         ]
         result = engine.deduplicate_risks(risks)
         assert len(result) == 2
@@ -375,12 +410,26 @@ class TestRiskDeduplication:
     def test_no_rule_id_name_based_dedup(self, engine):
         """无 rule_id 时基于名称 + 内容预览去重"""
         risks = [
-            RiskItem(id="R1", rule_id="", name="风险A", category="cat",
-                     risk_level="high", description="desc",
-                     clause_content_preview="这是相同的条款内容", confidence=0.8),
-            RiskItem(id="R2", rule_id="", name="风险A", category="cat",
-                     risk_level="medium", description="desc",
-                     clause_content_preview="这是相同的条款内容片段", confidence=0.6),
+            RiskItem(
+                id="R1",
+                rule_id="",
+                name="风险A",
+                category="cat",
+                risk_level="high",
+                description="desc",
+                clause_content_preview="这是相同的条款内容",
+                confidence=0.8,
+            ),
+            RiskItem(
+                id="R2",
+                rule_id="",
+                name="风险A",
+                category="cat",
+                risk_level="medium",
+                description="desc",
+                clause_content_preview="这是相同的条款内容片段",
+                confidence=0.6,
+            ),
         ]
         result = engine.deduplicate_risks(risks)
         assert len(result) == 1
@@ -390,15 +439,24 @@ class TestRiskDeduplication:
 # LLM 响应解析
 # ============================================
 
+
 class TestLLMResponseParsing:
     """LLM 响应解析测试"""
 
     def test_parse_json_array(self, engine):
         """解析标准 JSON 数组"""
-        response = json.dumps([
-            {"name": "风险1", "category": "违约", "risk_level": "high",
-             "description": "测试", "clause_preview": "条款内容", "confidence": 0.8}
-        ])
+        response = json.dumps(
+            [
+                {
+                    "name": "风险1",
+                    "category": "违约",
+                    "risk_level": "high",
+                    "description": "测试",
+                    "clause_preview": "条款内容",
+                    "confidence": 0.8,
+                }
+            ]
+        )
         risks = engine._parse_llm_response(response)
         assert len(risks) == 1
         assert risks[0].name == "风险1"
@@ -448,6 +506,7 @@ class TestLLMResponseParsing:
 # 文档类型检测
 # ============================================
 
+
 class TestDocumentTypeDetection:
     """文档类型检测测试"""
 
@@ -486,6 +545,7 @@ class TestDocumentTypeDetection:
 # 风险-条款溯源关联
 # ============================================
 
+
 class TestRiskClauseLinking:
     """风险-条款溯源关联测试"""
 
@@ -494,9 +554,16 @@ class TestRiskClauseLinking:
         from src.parser import Clause
 
         risks = [
-            RiskItem(id="R1", rule_id="RULE_001", name="风险A", category="cat",
-                     risk_level="high", description="desc",
-                     clause_position="违约责任", confidence=0.8)
+            RiskItem(
+                id="R1",
+                rule_id="RULE_001",
+                name="风险A",
+                category="cat",
+                risk_level="high",
+                description="desc",
+                clause_position="违约责任",
+                confidence=0.8,
+            )
         ]
         clauses = [
             Clause(id=1, content="如乙方违约，应支付违约金。", title="违约责任"),
@@ -513,12 +580,21 @@ class TestRiskClauseLinking:
 
         preview = "如乙方违约应支付违约金十万元，赔偿甲方因此遭受的全部经济损失和合理费用"
         risks = [
-            RiskItem(id="R1", rule_id="RULE_001", name="风险A", category="cat",
-                     risk_level="high", description="desc",
-                     clause_content_preview=preview, confidence=0.8)
+            RiskItem(
+                id="R1",
+                rule_id="RULE_001",
+                name="风险A",
+                category="cat",
+                risk_level="high",
+                description="desc",
+                clause_content_preview=preview,
+                confidence=0.8,
+            )
         ]
         clauses = [
-            Clause(id=1, content="如乙方违约应支付违约金十万元，赔偿甲方因此遭受的全部经济损失和合理费用。另有约定的除外。"),
+            Clause(
+                id=1, content="如乙方违约应支付违约金十万元，赔偿甲方因此遭受的全部经济损失和合理费用。另有约定的除外。"
+            ),
         ]
 
         result = engine.link_risks_to_clauses(risks, clauses)
@@ -529,9 +605,16 @@ class TestRiskClauseLinking:
         from src.parser import Clause
 
         risks = [
-            RiskItem(id="R1", rule_id="RULE_001", name="风险A", category="cat",
-                     risk_level="high", description="desc",
-                     clause_position="不存在的条款", confidence=0.8)
+            RiskItem(
+                id="R1",
+                rule_id="RULE_001",
+                name="风险A",
+                category="cat",
+                risk_level="high",
+                description="desc",
+                clause_position="不存在的条款",
+                confidence=0.8,
+            )
         ]
         clauses = [
             Clause(id=1, content="完全无关的内容。", title="无关条款"),

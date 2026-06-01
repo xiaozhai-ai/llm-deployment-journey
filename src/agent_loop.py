@@ -6,18 +6,19 @@ Agent 主循环模块 (Agent Loop)
 """
 
 import asyncio
-import time
 import threading
-from typing import Dict, List, Optional, Callable
+import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 
-from src.logger import logger_manager
 from src.chat_memory import ChatMemory
+from src.logger import logger_manager
 
 
 class TaskStage(Enum):
     """任务阶段"""
+
     INIT = "init"
     PARSING = "parsing"
     SECURITY_CHECK = "security_check"
@@ -47,26 +48,28 @@ STAGE_NAMES = {
 @dataclass
 class TaskProgress:
     """任务进度"""
+
     stage: TaskStage
     stage_name: str
     percentage: float  # 0-100
     message: str
-    detail: Optional[str] = None
+    detail: str | None = None
     timestamp: float = field(default_factory=time.time)
 
 
 @dataclass
 class ReviewTask:
     """审查任务"""
+
     task_id: str
     session_id: str
     status: str = "pending"  # pending / running / completed / failed / cancelled
-    progress: Optional[TaskProgress] = None
-    result: Optional[Dict] = None
-    error: Optional[str] = None
+    progress: TaskProgress | None = None
+    result: dict | None = None
+    error: str | None = None
     created_at: float = field(default_factory=time.time)
-    started_at: Optional[float] = None
-    completed_at: Optional[float] = None
+    started_at: float | None = None
+    completed_at: float | None = None
 
 
 class AgentLoop:
@@ -86,7 +89,7 @@ class AgentLoop:
         legal_matcher,
         report_gen,
         redliner=None,
-        llm_client_factory=None
+        llm_client_factory=None,
     ):
         """
         初始化 Agent 循环
@@ -110,7 +113,7 @@ class AgentLoop:
         self.redliner = redliner
         self.llm_client_factory = llm_client_factory
 
-        self.tasks: Dict[str, ReviewTask] = {}
+        self.tasks: dict[str, ReviewTask] = {}
         self._tasks_lock = threading.Lock()
         self._max_tasks = 50  # 最大保留任务数
         self.logger = logger_manager
@@ -123,9 +126,9 @@ class AgentLoop:
         playbook_id: str = "neutral",
         use_llm: bool = True,
         special_requirements: str = "",
-        session_id: Optional[str] = None,
-        progress_callback: Optional[Callable[[TaskProgress], None]] = None
-    ) -> Dict:
+        session_id: str | None = None,
+        progress_callback: Callable[[TaskProgress], None] | None = None,
+    ) -> dict:
         """
         启动审查任务
 
@@ -143,6 +146,7 @@ class AgentLoop:
             审查结果字典
         """
         import uuid
+
         task_id = str(uuid.uuid4())[:12]
 
         task = ReviewTask(task_id=task_id, session_id=session_id or "standalone")
@@ -150,7 +154,7 @@ class AgentLoop:
             self._cleanup_old_tasks()
             self.tasks[task_id] = task
 
-        self.logger.audit_file_upload(filename, len(file_bytes), filename.split('.')[-1])
+        self.logger.audit_file_upload(filename, len(file_bytes), filename.split(".")[-1])
         self.logger.audit_review_start(filename, document_type, playbook_id, use_llm)
 
         start_time = time.time()
@@ -167,7 +171,7 @@ class AgentLoop:
                 use_llm=use_llm,
                 special_requirements=special_requirements,
                 task=task,
-                progress_callback=progress_callback
+                progress_callback=progress_callback,
             )
 
             task.status = "completed"
@@ -177,9 +181,9 @@ class AgentLoop:
             duration = time.time() - start_time
             self.logger.audit_review_complete(
                 filename,
-                result.get('risk_summary', {}).get('total', 0),
-                result.get('risk_summary', {}).get('high', 0),
-                duration
+                result.get("risk_summary", {}).get("total", 0),
+                result.get("risk_summary", {}).get("high", 0),
+                duration,
             )
 
             return result
@@ -191,12 +195,9 @@ class AgentLoop:
             self.logger.error(f"审查任务失败 [{task_id}]: {e}", exc_info=True)
 
             if progress_callback:
-                progress_callback(TaskProgress(
-                    stage=TaskStage.ERROR,
-                    stage_name="出错",
-                    percentage=0,
-                    message=f"审查失败: {str(e)}"
-                ))
+                progress_callback(
+                    TaskProgress(stage=TaskStage.ERROR, stage_name="出错", percentage=0, message=f"审查失败: {str(e)}")
+                )
 
             raise
 
@@ -209,15 +210,12 @@ class AgentLoop:
         use_llm: bool,
         special_requirements: str,
         task: ReviewTask,
-        progress_callback: Optional[Callable]
-    ) -> Dict:
+        progress_callback: Callable | None,
+    ) -> dict:
         """执行审查流程"""
 
         # Stage 1: 文件解析 (10%)
-        await self._update_progress(
-            task, TaskStage.PARSING, 10, f"正在解析文件: {filename}",
-            progress_callback
-        )
+        await self._update_progress(task, TaskStage.PARSING, 10, f"正在解析文件: {filename}", progress_callback)
         parsed_doc = self.parser.parse_bytes(file_bytes, filename)
         text = parsed_doc.full_text
 
@@ -241,21 +239,18 @@ class AgentLoop:
                 ),
                 "risk_summary": {"total": 0, "critical": 0, "high": 0, "medium": 0, "low": 0},
                 "risks": [],
-                "document_type": "unknown"
+                "document_type": "unknown",
             }
 
         # Stage 2: 安全检查 (25%)
-        await self._update_progress(
-            task, TaskStage.SECURITY_CHECK, 25, "正在进行安全检查",
-            progress_callback
-        )
+        await self._update_progress(task, TaskStage.SECURITY_CHECK, 25, "正在进行安全检查", progress_callback)
         security_result = self.security.check_text(text)
 
         if security_result.out_of_scope:
             return {
                 "status": "out_of_scope",
                 "message": security_result.out_of_scope_reason,
-                "security_warning": security_result.risk_warning
+                "security_warning": security_result.risk_warning,
             }
 
         # 获取策略
@@ -265,10 +260,7 @@ class AgentLoop:
             playbook = self.risk_engine.playbook_manager.get_playbook("neutral")
 
         # Stage 3: 规则分析 (45%)
-        await self._update_progress(
-            task, TaskStage.RULE_ANALYSIS, 45, "正在进行规则分析",
-            progress_callback
-        )
+        await self._update_progress(task, TaskStage.RULE_ANALYSIS, 45, "正在进行规则分析", progress_callback)
         risk_result = self.risk_engine.analyze_by_rules(text, document_type, playbook)
 
         # Stage 4: LLM 分析 (65%)
@@ -276,40 +268,37 @@ class AgentLoop:
         tool_call_log = []  # 工具调用日志
 
         if use_llm and self.llm_client_factory:
-            await self._update_progress(
-                task, TaskStage.LLM_ANALYSIS, 65, "正在进行 AI 深度分析",
-                progress_callback
-            )
+            await self._update_progress(task, TaskStage.LLM_ANALYSIS, 65, "正在进行 AI 深度分析", progress_callback)
             try:
                 llm_client = self.llm_client_factory()
 
                 # 包装进度回调，收集工具调用日志
-                def on_tool_event(event: Dict):
-                    tool_call_log.append({
-                        "risk_name": event.get("risk_name", ""),
-                        "tool": event.get("tool", "AI 推理"),
-                        "status": event.get("type", ""),
-                        "detail": event.get("content", "")[:150]
-                    })
+                def on_tool_event(event: dict):
+                    tool_call_log.append(
+                        {
+                            "risk_name": event.get("risk_name", ""),
+                            "tool": event.get("tool", "AI 推理"),
+                            "status": event.get("type", ""),
+                            "detail": event.get("content", "")[:150],
+                        }
+                    )
 
                     if progress_callback:
                         stage_msg = {
                             "tool_call": f"🤖 AI 正在调用 {event.get('tool', '')}...",
                             "tool_result": f"✅ {event.get('tool', '')} 返回结果",
                             "interrupted": f"🛑 {event.get('content', '')[:100]}",
-                            "reflection": f"🔍 自我反思：{event.get('content', '')[:100]}"
+                            "reflection": f"🔍 自我反思：{event.get('content', '')[:100]}",
                         }.get(event.get("type", ""), event.get("content", ""))
 
-                        progress_callback(TaskProgress(
-                            stage=TaskStage.LLM_ANALYSIS,
-                            stage_name="AI 深度分析",
-                            percentage=65,
-                            message=stage_msg
-                        ))
+                        progress_callback(
+                            TaskProgress(
+                                stage=TaskStage.LLM_ANALYSIS, stage_name="AI 深度分析", percentage=65, message=stage_msg
+                            )
+                        )
 
                 llm_risk_result = await self.risk_engine.analyze_with_llm(
-                    text, document_type, llm_client, playbook,
-                    progress_callback=on_tool_event
+                    text, document_type, llm_client, playbook, progress_callback=on_tool_event
                 )
                 # 合并结果
                 risk_result.risks.extend(llm_risk_result.risks)
@@ -320,23 +309,21 @@ class AgentLoop:
                 # 去重：规则分析和 LLM 分析可能识别同一风险
                 risk_result.risks = self.risk_engine.deduplicate_risks(risk_result.risks)
                 # 重新统计
-                risk_result.critical_count = sum(1 for r in risk_result.risks if r.risk_level == 'critical')
-                risk_result.high_count = sum(1 for r in risk_result.risks if r.risk_level == 'high')
-                risk_result.medium_count = sum(1 for r in risk_result.risks if r.risk_level == 'medium')
-                risk_result.low_count = sum(1 for r in risk_result.risks if r.risk_level == 'low')
+                risk_result.critical_count = sum(1 for r in risk_result.risks if r.risk_level == "critical")
+                risk_result.high_count = sum(1 for r in risk_result.risks if r.risk_level == "high")
+                risk_result.medium_count = sum(1 for r in risk_result.risks if r.risk_level == "medium")
+                risk_result.low_count = sum(1 for r in risk_result.risks if r.risk_level == "low")
             except Exception as e:
                 # 降级策略：记录警告，继续使用规则分析结果
                 from src.exceptions import classify_error, get_user_friendly_message
+
                 error_code = classify_error(e)
                 user_msg = get_user_friendly_message(error_code)
                 llm_warnings.append(f"⚠️ {user_msg}，已使用规则分析结果")
                 self.logger.warning(f"LLM 分析降级: {e}")
 
         # Stage 5: 法条匹配 (80%)
-        await self._update_progress(
-            task, TaskStage.LEGAL_MATCH, 80, "正在匹配相关法条",
-            progress_callback
-        )
+        await self._update_progress(task, TaskStage.LEGAL_MATCH, 80, "正在匹配相关法条", progress_callback)
         all_legal_matches = []
         for risk in risk_result.risks:
             if risk.legal_basis:
@@ -347,22 +334,17 @@ class AgentLoop:
                     risk.cited_provisions.append(f"《{m.provision.law}》{m.provision.article}")
 
         # 溯源关联：将风险项关联回原始条款
-        risk_result.risks = self.risk_engine.link_risks_to_clauses(
-            risk_result.risks, parsed_doc.clauses
-        )
+        risk_result.risks = self.risk_engine.link_risks_to_clauses(risk_result.risks, parsed_doc.clauses)
 
         # Stage 6: 生成报告 (90%)
-        await self._update_progress(
-            task, TaskStage.REPORT_GEN, 90, "正在生成审查报告",
-            progress_callback
-        )
+        await self._update_progress(task, TaskStage.REPORT_GEN, 90, "正在生成审查报告", progress_callback)
         report_md = self.report_gen.generate_report(
             document_name=filename,
             document_type=document_type,
             risk_result=risk_result,
             legal_matches=all_legal_matches,
             security_warning=security_result.risk_warning,
-            sensitive_items=security_result.sensitive_items
+            sensitive_items=security_result.sensitive_items,
         )
         report_dict = self.report_gen.generate_report_dict(
             document_name=filename,
@@ -370,45 +352,36 @@ class AgentLoop:
             risk_result=risk_result,
             legal_matches=all_legal_matches,
             security_warning=security_result.risk_warning,
-            sensitive_items=security_result.sensitive_items
+            sensitive_items=security_result.sensitive_items,
         )
 
         # Stage 7: 生成修订建议（可选，95%）
         revisions_html = ""
         docx_bytes = None
         if self.redliner and risk_result.risks:
-            await self._update_progress(
-                task, TaskStage.REVISION_GEN, 95, "正在生成修订建议",
-                progress_callback
-            )
+            await self._update_progress(task, TaskStage.REVISION_GEN, 95, "正在生成修订建议", progress_callback)
             try:
                 if use_llm and self.llm_client_factory:
                     llm_client = self.llm_client_factory()
                     self.redliner.set_llm_client(llm_client)
 
-                revision_doc = await self.redliner.generate_revisions(
-                    text, risk_result.risks, playbook
-                )
+                revision_doc = await self.redliner.generate_revisions(text, risk_result.risks, playbook)
                 revisions_html = revision_doc.html_full_diff
 
                 # 生成 DOCX
                 if revision_doc.revisions:
-                    docx_bytes = self.redliner.generate_docx_with_revisions(
-                        text, revision_doc.revisions, filename
-                    )
+                    docx_bytes = self.redliner.generate_docx_with_revisions(text, revision_doc.revisions, filename)
             except Exception as e:
                 # 降级策略：记录警告，但不阻断流程
                 from src.exceptions import classify_error, get_user_friendly_message
+
                 error_code = classify_error(e)
                 user_msg = get_user_friendly_message(error_code)
                 llm_warnings.append(f"📝 {user_msg}")
                 self.logger.warning(f"修订建议生成降级: {e}")
 
         # Complete (100%)
-        await self._update_progress(
-            task, TaskStage.COMPLETE, 100, "审查完成",
-            progress_callback
-        )
+        await self._update_progress(task, TaskStage.COMPLETE, 100, "审查完成", progress_callback)
 
         # 构建结果
         if not risk_result.risks:
@@ -423,22 +396,16 @@ class AgentLoop:
             "security_warning": security_result.risk_warning,
             "tool_call_log": tool_call_log,
             "sensitive_items": [
-                {"type": item.type, "masked_value": item.masked_value}
-                for item in security_result.sensitive_items
+                {"type": item.type, "masked_value": item.masked_value} for item in security_result.sensitive_items
             ],
             "document_type": document_type,
             "playbook_id": playbook_id,
             # 溯源数据
             "clauses": [
-                {
-                    "id": c.id,
-                    "title": c.title or f"第{c.id}条",
-                    "content": c.content,
-                    "clause_type": c.clause_type
-                }
+                {"id": c.id, "title": c.title or f"第{c.id}条", "content": c.content, "clause_type": c.clause_type}
                 for c in parsed_doc.clauses
             ],
-            "original_text": text  # 用于高亮显示
+            "original_text": text,  # 用于高亮显示
         }
 
         if docx_bytes:
@@ -447,20 +414,10 @@ class AgentLoop:
         return result
 
     async def _update_progress(
-        self,
-        task: ReviewTask,
-        stage: TaskStage,
-        percentage: float,
-        message: str,
-        callback: Optional[Callable]
+        self, task: ReviewTask, stage: TaskStage, percentage: float, message: str, callback: Callable | None
     ):
         """更新任务进度"""
-        progress = TaskProgress(
-            stage=stage,
-            stage_name=STAGE_NAMES[stage],
-            percentage=percentage,
-            message=message
-        )
+        progress = TaskProgress(stage=stage, stage_name=STAGE_NAMES[stage], percentage=percentage, message=message)
         task.progress = progress
 
         if callback:
@@ -475,16 +432,13 @@ class AgentLoop:
     def _cleanup_old_tasks(self):
         """清理已完成的旧任务，防止内存无限增长（需在 _tasks_lock 下调用）"""
         done_statuses = {"completed", "failed", "cancelled"}
-        done_tasks = [
-            (tid, t) for tid, t in self.tasks.items()
-            if t.status in done_statuses
-        ]
+        done_tasks = [(tid, t) for tid, t in self.tasks.items() if t.status in done_statuses]
         if len(done_tasks) > self._max_tasks // 2:
             done_tasks.sort(key=lambda x: x[1].completed_at or 0)
-            for tid, _ in done_tasks[:len(done_tasks) // 2]:
+            for tid, _ in done_tasks[: len(done_tasks) // 2]:
                 del self.tasks[tid]
 
-    def get_task(self, task_id: str) -> Optional[ReviewTask]:
+    def get_task(self, task_id: str) -> ReviewTask | None:
         """获取任务状态"""
         with self._tasks_lock:
             return self.tasks.get(task_id)
@@ -498,21 +452,17 @@ class AgentLoop:
                 return True
             return False
 
-    def list_tasks(self, limit: int = 10) -> List[Dict]:
+    def list_tasks(self, limit: int = 10) -> list[dict]:
         """列出最近任务"""
         with self._tasks_lock:
-            sorted_tasks = sorted(
-                self.tasks.values(),
-                key=lambda t: t.created_at,
-                reverse=True
-            )
+            sorted_tasks = sorted(self.tasks.values(), key=lambda t: t.created_at, reverse=True)
             return [
                 {
                     "task_id": t.task_id,
                     "status": t.status,
                     "progress": t.progress.percentage if t.progress else 0,
                     "created_at": t.created_at,
-                    "error": t.error
+                    "error": t.error,
                 }
                 for t in sorted_tasks[:limit]
             ]

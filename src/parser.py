@@ -5,34 +5,33 @@
 """
 
 import os
-from typing import Dict, List, Optional
 from dataclasses import dataclass
 
-from src.exceptions import (
-    UnsupportedFormatError, FileCorruptedError
-)
+from src.exceptions import FileCorruptedError, UnsupportedFormatError
 from src.logger import logger_manager
 
 
 @dataclass
 class Clause:
     """条款数据结构"""
+
     id: int
     content: str
-    title: Optional[str] = None
+    title: str | None = None
     start_pos: int = 0
     end_pos: int = 0
-    clause_type: Optional[str] = None  # 条款类型（如违约责任、争议解决等）
+    clause_type: str | None = None  # 条款类型（如违约责任、争议解决等）
 
 
 @dataclass
 class ParsedDocument:
     """解析后的文档结构"""
+
     original_filename: str
     file_type: str  # pdf, docx, txt
     full_text: str
-    clauses: List[Clause]
-    metadata: Dict = None
+    clauses: list[Clause]
+    metadata: dict = None
 
     def __post_init__(self):
         if self.metadata is None:
@@ -42,7 +41,7 @@ class ParsedDocument:
 class DocumentParser:
     """文档解析器"""
 
-    SUPPORTED_EXTENSIONS = {'.pdf', '.docx', '.doc', '.txt'}
+    SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt"}
 
     def __init__(self):
         pass
@@ -68,13 +67,13 @@ class DocumentParser:
         if ext not in self.SUPPORTED_EXTENSIONS:
             raise UnsupportedFormatError(ext)
 
-        if ext == '.pdf':
+        if ext == ".pdf":
             full_text = self._parse_pdf(file_path)
-        elif ext == '.docx':
+        elif ext == ".docx":
             full_text = self._parse_docx(file_path)
-        elif ext == '.doc':
+        elif ext == ".doc":
             full_text = self._parse_doc(file_path)
-        elif ext == '.txt':
+        elif ext == ".txt":
             full_text = self._parse_txt(file_path)
         else:
             raise UnsupportedFormatError(ext)
@@ -86,7 +85,7 @@ class DocumentParser:
             file_type=ext[1:],
             full_text=full_text,
             clauses=clauses,
-            metadata={"file_size": os.path.getsize(file_path), "extension": ext}
+            metadata={"file_size": os.path.getsize(file_path), "extension": ext},
         )
 
     def parse_bytes(self, file_bytes: bytes, filename: str) -> ParsedDocument:
@@ -104,13 +103,13 @@ class DocumentParser:
         if ext not in self.SUPPORTED_EXTENSIONS:
             raise UnsupportedFormatError(ext)
 
-        if ext == '.pdf':
+        if ext == ".pdf":
             full_text = self._parse_pdf_bytes(file_bytes)
-        elif ext == '.docx':
+        elif ext == ".docx":
             full_text = self._parse_docx_bytes(file_bytes)
-        elif ext == '.doc':
+        elif ext == ".doc":
             full_text = self._parse_doc_bytes(file_bytes)
-        elif ext == '.txt':
+        elif ext == ".txt":
             full_text = self._parse_txt_bytes(file_bytes)
         else:
             raise UnsupportedFormatError(ext)
@@ -122,13 +121,14 @@ class DocumentParser:
             file_type=ext[1:],
             full_text=full_text,
             clauses=clauses,
-            metadata={"file_size": len(file_bytes), "extension": ext}
+            metadata={"file_size": len(file_bytes), "extension": ext},
         )
 
     def _parse_pdf(self, file_path: str) -> str:
         """解析 PDF 文件"""
         try:
             import pdfplumber
+
             text_parts = []
             with pdfplumber.open(file_path) as pdf:
                 for page in pdf.pages:
@@ -136,16 +136,18 @@ class DocumentParser:
                     if page_text:
                         text_parts.append(page_text)
             logger_manager.debug(f"成功解析 PDF 文件: {file_path}")
-            return '\n'.join(text_parts)
+            return "\n".join(text_parts)
         except Exception as e:
             logger_manager.error(f"PDF 解析失败: {file_path}: {e}")
-            raise FileCorruptedError(f"PDF 文件解析失败: {e}")
+            raise FileCorruptedError(f"PDF 文件解析失败: {e}") from e
 
     def _parse_pdf_bytes(self, file_bytes: bytes) -> str:
         """从字节流解析 PDF"""
         try:
-            import pdfplumber
             import io
+
+            import pdfplumber
+
             text_parts = []
             with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
                 for page in pdf.pages:
@@ -153,41 +155,44 @@ class DocumentParser:
                     if page_text:
                         text_parts.append(page_text)
             logger_manager.debug("成功解析 PDF 字节流")
-            return '\n'.join(text_parts)
+            return "\n".join(text_parts)
         except Exception as e:
             logger_manager.error(f"PDF 字节流解析失败: {e}")
-            raise FileCorruptedError(f"PDF 字节流解析失败: {e}")
+            raise FileCorruptedError(f"PDF 字节流解析失败: {e}") from e
 
     def _parse_docx(self, file_path: str) -> str:
         """解析 Word 文件"""
         try:
             from docx import Document
+
             doc = Document(file_path)
             text_parts = []
             for para in doc.paragraphs:
                 if para.text.strip():
                     text_parts.append(para.text)
             logger_manager.debug(f"成功解析 DOCX 文件: {file_path}")
-            return '\n'.join(text_parts)
+            return "\n".join(text_parts)
         except Exception as e:
             logger_manager.error(f"DOCX 解析失败: {file_path}: {e}")
-            raise FileCorruptedError(f"Word 文件解析失败: {e}")
+            raise FileCorruptedError(f"Word 文件解析失败: {e}") from e
 
     def _parse_docx_bytes(self, file_bytes: bytes) -> str:
         """从字节流解析 Word"""
         try:
-            from docx import Document
             import io
+
+            from docx import Document
+
             doc = Document(io.BytesIO(file_bytes))
             text_parts = []
             for para in doc.paragraphs:
                 if para.text.strip():
                     text_parts.append(para.text)
             logger_manager.debug("成功解析 DOCX 字节流")
-            return '\n'.join(text_parts)
+            return "\n".join(text_parts)
         except Exception as e:
             logger_manager.error(f"DOCX 字节流解析失败: {e}")
-            raise FileCorruptedError(f"Word 字节流解析失败: {e}")
+            raise FileCorruptedError(f"Word 字节流解析失败: {e}") from e
 
     def _parse_doc(self, file_path: str) -> str:
         """
@@ -199,14 +204,12 @@ class DocumentParser:
         try:
             # 方案 0: 检测是否是 HTML 格式的 .doc 文件（WPS 保存的）
             try:
-                with open(file_path, 'rb') as f:
+                with open(file_path, "rb") as f:
                     content = f.read()
                 header = content[:200]
-                if header.startswith(b'<html') or header.startswith(b'<HTML') or b'<!DOCTYPE' in header:
+                if header.startswith(b"<html") or header.startswith(b"<HTML") or b"<!DOCTYPE" in header:
                     logger_manager.info(f"检测到 HTML 格式的 .doc 文件: {file_path}")
-                    return self._extract_text_from_html(
-                        content.decode('utf-8', errors='ignore')
-                    )
+                    return self._extract_text_from_html(content.decode("utf-8", errors="ignore"))
             except Exception as e:
                 logger_manager.debug(f"HTML 检测失败: {e}")
 
@@ -247,6 +250,7 @@ class DocumentParser:
 
                 # 解析转换后的 DOCX
                 from docx import Document
+
                 docx_doc = Document(temp_docx)
                 text_parts = [para.text for para in docx_doc.paragraphs if para.text.strip()]
 
@@ -255,7 +259,7 @@ class DocumentParser:
                     os.remove(temp_docx)
 
                 logger_manager.debug(f"成功解析 DOC 文件（通过 win32com）: {file_path}")
-                return '\n'.join(text_parts)
+                return "\n".join(text_parts)
 
             except ImportError:
                 logger_manager.debug("win32com 不可用（正常，WPS 用户不需要）")
@@ -265,12 +269,8 @@ class DocumentParser:
             # 方案 3: 使用 antiword（Linux/macOS，如果可用）
             try:
                 import subprocess
-                result = subprocess.run(
-                    ['antiword', file_path],
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
+
+                result = subprocess.run(["antiword", file_path], capture_output=True, text=True, timeout=10)
                 if result.returncode == 0 and result.stdout.strip():
                     logger_manager.debug(f"成功解析 DOC 文件（通过 antiword）: {file_path}")
                     return result.stdout
@@ -281,15 +281,14 @@ class DocumentParser:
 
             # 如果所有方案都失败，抛出错误
             raise FileCorruptedError(
-                "旧版 Word 文件解析失败。请安装 olefile: pip install olefile，"
-                "或在 WPS 中将文件另存为 .docx 格式"
+                "旧版 Word 文件解析失败。请安装 olefile: pip install olefile，或在 WPS 中将文件另存为 .docx 格式"
             )
 
         except FileCorruptedError:
             raise
         except Exception as e:
             logger_manager.error(f"DOC 解析失败: {file_path}: {e}")
-            raise FileCorruptedError(f"旧版 Word 文件解析失败: {e}")
+            raise FileCorruptedError(f"旧版 Word 文件解析失败: {e}") from e
 
     def _parse_html_doc(self, file_path: str) -> str:
         """
@@ -299,18 +298,18 @@ class DocumentParser:
         """
         try:
             # 读取文件内容
-            with open(file_path, 'rb') as f:
+            with open(file_path, "rb") as f:
                 raw = f.read()
 
             # 尝试多种编码
-            for encoding in ['utf-8', 'gbk', 'gb2312', 'gb18030', 'latin-1']:
+            for encoding in ["utf-8", "gbk", "gb2312", "gb18030", "latin-1"]:
                 try:
                     html_content = raw.decode(encoding)
                     break
                 except UnicodeDecodeError:
                     continue
             else:
-                html_content = raw.decode('utf-8', errors='ignore')
+                html_content = raw.decode("utf-8", errors="ignore")
 
             return self._extract_text_from_html(html_content)
 
@@ -320,22 +319,22 @@ class DocumentParser:
 
     def _extract_text_from_html(self, html_content: str) -> str:
         """从 HTML 内容中提取纯文本"""
-        from html.parser import HTMLParser
         import re
+        from html.parser import HTMLParser
 
         class HTMLTextExtractor(HTMLParser):
             def __init__(self):
                 super().__init__()
                 self.text_parts = []
-                self.skip_tags = {'script', 'style', 'head'}
+                self.skip_tags = {"script", "style", "head"}
                 self.current_tag = None
 
             def handle_starttag(self, tag, attrs):
                 self.current_tag = tag.lower()
 
             def handle_endtag(self, tag):
-                if tag.lower() in ('p', 'div', 'br', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'tr'):
-                    self.text_parts.append('\n')
+                if tag.lower() in ("p", "div", "br", "h1", "h2", "h3", "h4", "h5", "h6", "li", "tr"):
+                    self.text_parts.append("\n")
                 self.current_tag = None
 
             def handle_data(self, data):
@@ -345,7 +344,7 @@ class DocumentParser:
                         self.text_parts.append(text)
 
             def get_text(self):
-                return ''.join(self.text_parts)
+                return "".join(self.text_parts)
 
         # 提取文本
         extractor = HTMLTextExtractor()
@@ -353,8 +352,8 @@ class DocumentParser:
         text = extractor.get_text()
 
         # 清理文本
-        text = re.sub(r'\n\s*\n', '\n', text)  # 合并多个空行
-        text = re.sub(r'[ \t]+', ' ', text)  # 合并多个空格
+        text = re.sub(r"\n\s*\n", "\n", text)  # 合并多个空行
+        text = re.sub(r"[ \t]+", " ", text)  # 合并多个空格
         text = text.strip()
 
         if len(text) > 10:
@@ -369,7 +368,7 @@ class DocumentParser:
 
         tmp_path = None
         try:
-            with tempfile.NamedTemporaryFile(suffix='.doc', delete=False) as tmp:
+            with tempfile.NamedTemporaryFile(suffix=".doc", delete=False) as tmp:
                 tmp.write(file_bytes)
                 tmp_path = tmp.name
             return self._parse_doc(tmp_path)
@@ -386,8 +385,9 @@ class DocumentParser:
 
         从 .doc 文件的多个流中提取文本内容，兼容 WPS 创建的文档
         """
-        import olefile
         import re
+
+        import olefile
 
         try:
             ole = olefile.OleFileIO(file_path)
@@ -398,17 +398,17 @@ class DocumentParser:
         try:
             # 先检查 WordDocument 流是否包含 HTML 内容（WPS 保存的 .doc 文件）
             try:
-                word_stream = ole.openstream('WordDocument').read()
-                if word_stream[:100].lstrip().startswith((b'<html', b'<HTML', b'<!DOCTYPE')):
+                word_stream = ole.openstream("WordDocument").read()
+                if word_stream[:100].lstrip().startswith((b"<html", b"<HTML", b"<!DOCTYPE")):
                     logger_manager.info("检测到 OLE 文件中包含 HTML 内容（WPS 格式）")
-                    for encoding in ['utf-8', 'gbk', 'gb2312', 'gb18030', 'latin-1']:
+                    for encoding in ["utf-8", "gbk", "gb2312", "gb18030", "latin-1"]:
                         try:
                             html_content = word_stream.decode(encoding)
                             break
                         except UnicodeDecodeError:
                             continue
                     else:
-                        html_content = word_stream.decode('utf-8', errors='ignore')
+                        html_content = word_stream.decode("utf-8", errors="ignore")
 
                     return self._extract_text_from_html(html_content)
             except Exception as e:
@@ -422,11 +422,11 @@ class DocumentParser:
             # 中文标点：\u3000-\u303f, \uff00-\uffef
             # 全角字符：\uff01-\uff5e
             chinese_char_pattern = re.compile(
-                r'[\u4e00-\u9fa5\u3000-\u303f\uff00-\uffef\u2000-\u206f\u0020-\u007e\r\n\t]'
+                r"[\u4e00-\u9fa5\u3000-\u303f\uff00-\uffef\u2000-\u206f\u0020-\u007e\r\n\t]"
             )
 
             # 流名称列表（按优先级排序）
-            stream_names = ['WordDocument', '1Table', '0Table', 'Data']
+            stream_names = ["WordDocument", "1Table", "0Table", "Data"]
 
             for stream_name in stream_names:
                 if not ole.exists(stream_name):
@@ -438,12 +438,12 @@ class DocumentParser:
 
                     # 方法 1: UTF-16-LE 解码（Word 文档标准编码）
                     try:
-                        decoded = raw_data.decode('utf-16-le', errors='ignore')
+                        decoded = raw_data.decode("utf-16-le", errors="ignore")
                         # 提取中文、英文、标点
                         chars = chinese_char_pattern.findall(decoded)
-                        text = ''.join(chars)
+                        text = "".join(chars)
                         # 清理多余空白
-                        text = re.sub(r'\s+', ' ', text).strip()
+                        text = re.sub(r"\s+", " ", text).strip()
                         if len(text) > 10:  # 降低阈值到 10
                             text_parts.append(text)
                             logger_manager.debug(f"从 {stream_name} 流提取到 {len(text)} 字符")
@@ -452,30 +452,24 @@ class DocumentParser:
 
                     # 方法 2: 逐字节提取（备用方案）
                     if not text_parts:
-                        text = ''
+                        text = ""
                         i = 0
                         while i < len(raw_data) - 1:
                             # ASCII 字符
-                            if raw_data[i+1] == 0 and 32 <= raw_data[i] < 127:
+                            if raw_data[i + 1] == 0 and 32 <= raw_data[i] < 127:
                                 text += chr(raw_data[i])
                             # 中文字符范围
-                            elif 0x4e00 <= (raw_data[i] | (raw_data[i+1] << 8)) <= 0x9fa5:
-                                char_code = raw_data[i] | (raw_data[i+1] << 8)
-                                text += chr(char_code)
-                                i += 1
-                            # 中文标点范围
-                            elif 0x3000 <= (raw_data[i] | (raw_data[i+1] << 8)) <= 0x303f:
-                                char_code = raw_data[i] | (raw_data[i+1] << 8)
-                                text += chr(char_code)
-                                i += 1
-                            # 全角字符
-                            elif 0xff00 <= (raw_data[i] | (raw_data[i+1] << 8)) <= 0xffef:
-                                char_code = raw_data[i] | (raw_data[i+1] << 8)
+                            elif (
+                                0x4E00 <= (raw_data[i] | (raw_data[i + 1] << 8)) <= 0x9FA5
+                                or 0x3000 <= (raw_data[i] | (raw_data[i + 1] << 8)) <= 0x303F
+                                or 0xFF00 <= (raw_data[i] | (raw_data[i + 1] << 8)) <= 0xFFEF
+                            ):
+                                char_code = raw_data[i] | (raw_data[i + 1] << 8)
                                 text += chr(char_code)
                                 i += 1
                             i += 1
 
-                        text = re.sub(r'\s+', ' ', text).strip()
+                        text = re.sub(r"\s+", " ", text).strip()
                         if len(text) > 10:
                             text_parts.append(text)
                             logger_manager.debug(f"从 {stream_name} 流逐字节提取到 {len(text)} 字符")
@@ -509,22 +503,22 @@ class DocumentParser:
 
     def _parse_txt(self, file_path: str) -> str:
         """解析 TXT 文件（支持多编码回退）"""
-        for encoding in ['utf-8', 'gbk', 'gb2312', 'gb18030', 'latin-1']:
+        for encoding in ["utf-8", "gbk", "gb2312", "gb18030", "latin-1"]:
             try:
-                with open(file_path, 'r', encoding=encoding) as f:
+                with open(file_path, encoding=encoding) as f:
                     text = f.read()
                 logger_manager.debug(f"成功解析 TXT 文件（编码: {encoding}）: {file_path}")
                 return text
             except UnicodeDecodeError:
                 continue
         # 所有编码都失败，使用 replace 模式兜底
-        with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+        with open(file_path, encoding="utf-8", errors="replace") as f:
             logger_manager.warning(f"TXT 文件编码检测失败，使用 UTF-8 replace 模式: {file_path}")
             return f.read()
 
     def _parse_txt_bytes(self, file_bytes: bytes) -> str:
         """从字节流解析 TXT（支持多编码回退）"""
-        for encoding in ['utf-8', 'gbk', 'gb2312', 'gb18030', 'latin-1']:
+        for encoding in ["utf-8", "gbk", "gb2312", "gb18030", "latin-1"]:
             try:
                 text = file_bytes.decode(encoding)
                 logger_manager.debug(f"成功解析 TXT 字节流（编码: {encoding}）")
@@ -532,9 +526,9 @@ class DocumentParser:
             except UnicodeDecodeError:
                 continue
         logger_manager.warning("TXT 字节流编码检测失败，使用 UTF-8 replace 模式")
-        return file_bytes.decode('utf-8', errors='replace')
+        return file_bytes.decode("utf-8", errors="replace")
 
-    def _split_clauses(self, text: str) -> List[Clause]:
+    def _split_clauses(self, text: str) -> list[Clause]:
         """
         将文本切分为条款
 
@@ -551,33 +545,54 @@ class DocumentParser:
         # 条款标题模式（按优先级排序）
         clause_patterns = [
             # 中文：第一条、第一章
-            (r'^(第[一二三四五六七八九十百千\d]+[条章节])\s*', 1),
+            (r"^(第[一二三四五六七八九十百千\d]+[条章节])\s*", 1),
             # 中文数字序号：一、二、
-            (r'^([一二三四五六七八九十]+[、.．])\s*', 2),
+            (r"^([一二三四五六七八九十]+[、.．])\s*", 2),
             # 中文数字序号：第1条
-            (r'^(第\d+条)\s*', 3),
+            (r"^(第\d+条)\s*", 3),
             # 纯数字序号：1.、1、
-            (r'^(\d+[.．、])\s*([^\n]{2,30})$', 4),
+            (r"^(\d+[.．、])\s*([^\n]{2,30})$", 4),
             # 英文合同：Article I, Article 1
-            (r'^(Article\s+[IVXLCDM\d]+)\s*', 5),
+            (r"^(Article\s+[IVXLCDM\d]+)\s*", 5),
             # 英文合同：Section 1.1, Section 2
-            (r'^(Section\s+\d+(?:\.\d+)?)\s*', 6),
+            (r"^(Section\s+\d+(?:\.\d+)?)\s*", 6),
             # 带括号的序号：（一）、(1)
-            (r'^[（(]([一二三四五六七八九十\d]+)[）)]\s*([^\n]{2,30})$', 7),
+            (r"^[（(]([一二三四五六七八九十\d]+)[）)]\s*([^\n]{2,30})$", 7),
         ]
 
         # 常见合同标题关键词（无序号时作为条款标题）
         clause_keywords = [
-            "违约责任", "争议解决", "保密条款", "知识产权",
-            "不可抗力", "生效条款", "当事人信息", "合同解除",
-            "合同终止", "付款方式", "交货期限", "质量保证",
-            "售后服务", "违约责任", "管辖法院", "适用法律",
-            "定义与解释", "权利义务", "合作内容", "合作期限",
-            "费用与支付", "保密义务", "违约责任", "不可抗力",
-            "争议解决", "其他约定", "附则", "总则"
+            "违约责任",
+            "争议解决",
+            "保密条款",
+            "知识产权",
+            "不可抗力",
+            "生效条款",
+            "当事人信息",
+            "合同解除",
+            "合同终止",
+            "付款方式",
+            "交货期限",
+            "质量保证",
+            "售后服务",
+            "违约责任",
+            "管辖法院",
+            "适用法律",
+            "定义与解释",
+            "权利义务",
+            "合作内容",
+            "合作期限",
+            "费用与支付",
+            "保密义务",
+            "违约责任",
+            "不可抗力",
+            "争议解决",
+            "其他约定",
+            "附则",
+            "总则",
         ]
 
-        lines = text.split('\n')
+        lines = text.split("\n")
         current_clause = None
         current_content = []
         pos = 0
@@ -586,26 +601,28 @@ class DocumentParser:
             stripped = line.strip()
             if not stripped:
                 if current_content:
-                    current_content.append('')
+                    current_content.append("")
                 continue
 
             is_clause_header = False
 
             # 策略1：匹配序号模式
-            for pattern, priority in clause_patterns:
+            for pattern, _priority in clause_patterns:
                 match = re.match(pattern, stripped)
                 if match:
                     # 保存之前的条款
                     if current_clause is not None:
-                        content = '\n'.join(current_content).strip()
+                        content = "\n".join(current_content).strip()
                         if content:
-                            clauses.append(Clause(
-                                id=len(clauses) + 1,
-                                content=content,
-                                title=current_clause,
-                                start_pos=pos - len(content),
-                                end_pos=pos
-                            ))
+                            clauses.append(
+                                Clause(
+                                    id=len(clauses) + 1,
+                                    content=content,
+                                    title=current_clause,
+                                    start_pos=pos - len(content),
+                                    end_pos=pos,
+                                )
+                            )
 
                     current_clause = stripped
                     current_content = []
@@ -617,15 +634,17 @@ class DocumentParser:
                 for keyword in clause_keywords:
                     if stripped == keyword or stripped.startswith(keyword + "：") or stripped.startswith(keyword + " "):
                         if current_clause is not None:
-                            content = '\n'.join(current_content).strip()
+                            content = "\n".join(current_content).strip()
                             if content:
-                                clauses.append(Clause(
-                                    id=len(clauses) + 1,
-                                    content=content,
-                                    title=current_clause,
-                                    start_pos=pos - len(content),
-                                    end_pos=pos
-                                ))
+                                clauses.append(
+                                    Clause(
+                                        id=len(clauses) + 1,
+                                        content=content,
+                                        title=current_clause,
+                                        start_pos=pos - len(content),
+                                        end_pos=pos,
+                                    )
+                                )
 
                         current_clause = stripped
                         current_content = []
@@ -639,41 +658,39 @@ class DocumentParser:
 
         # 保存最后一个条款
         if current_content:
-            content = '\n'.join(current_content).strip()
+            content = "\n".join(current_content).strip()
             if content:
-                clauses.append(Clause(
-                    id=len(clauses) + 1,
-                    content=content,
-                    title=current_clause,
-                    start_pos=pos - len(content),
-                    end_pos=pos
-                ))
+                clauses.append(
+                    Clause(
+                        id=len(clauses) + 1,
+                        content=content,
+                        title=current_clause,
+                        start_pos=pos - len(content),
+                        end_pos=pos,
+                    )
+                )
 
         # 如果没有检测到任何条款结构，尝试按段落切分
         if not clauses and text.strip():
-            paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+            paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
             if len(paragraphs) > 1:
                 for i, para in enumerate(paragraphs):
-                    clauses.append(Clause(
-                        id=i + 1,
-                        content=para,
-                        title=None,
-                        start_pos=text.find(para),
-                        end_pos=text.find(para) + len(para)
-                    ))
+                    clauses.append(
+                        Clause(
+                            id=i + 1,
+                            content=para,
+                            title=None,
+                            start_pos=text.find(para),
+                            end_pos=text.find(para) + len(para),
+                        )
+                    )
             else:
                 # 整个文档作为一个条款
-                clauses.append(Clause(
-                    id=1,
-                    content=text.strip(),
-                    title=None,
-                    start_pos=0,
-                    end_pos=len(text)
-                ))
+                clauses.append(Clause(id=1, content=text.strip(), title=None, start_pos=0, end_pos=len(text)))
 
         return clauses
 
-    def detect_clause_type(self, clause: Clause) -> Optional[str]:
+    def detect_clause_type(self, clause: Clause) -> str | None:
         """
         检测条款类型
 
@@ -694,7 +711,7 @@ class DocumentParser:
             "当事人信息": ["甲方", "乙方", "当事人", "地址", "法定代表人"],
         }
 
-        text = (clause.title or '') + ' ' + clause.content[:500]
+        text = (clause.title or "") + " " + clause.content[:500]
 
         for clause_type, keywords in type_keywords.items():
             for keyword in keywords:

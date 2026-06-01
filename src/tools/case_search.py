@@ -5,19 +5,19 @@
 """
 
 import os
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 import yaml
 
-from src.tools.base import BaseTool, ToolDefinition, ToolResult
 from src.config import get_paths_config
+from src.tools.base import BaseTool, ToolDefinition, ToolResult
 
 
 class CaseSearchTool(BaseTool):
     """判例检索工具"""
 
-    def __init__(self, case_law_path: Optional[str] = None, vector_store=None):
-        self.cases: List[Dict] = []
+    def __init__(self, case_law_path: str | None = None, vector_store=None):
+        self.cases: list[dict] = []
         self.vector_store = vector_store
 
         if case_law_path and os.path.exists(case_law_path):
@@ -35,12 +35,12 @@ class CaseSearchTool(BaseTool):
 
     def _load_cases(self, path: str):
         """加载案例库"""
-        with open(path, 'r', encoding='utf-8') as f:
+        with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
-        self.cases = data.get('cases', [])
+        self.cases = data.get("cases", [])
 
-    def add_case(self, case: Dict):
+    def add_case(self, case: dict):
         """动态添加案例"""
         self.cases.append(case)
 
@@ -61,36 +61,32 @@ class CaseSearchTool(BaseTool):
                     "query": {
                         "type": "string",
                         "description": (
-                            "案件关键词。例如：'对赌协议 业绩补偿'、"
-                            "'格式条款 提示义务'、'违约金 过高 调整'"
-                        )
+                            "案件关键词。例如：'对赌协议 业绩补偿'、'格式条款 提示义务'、'违约金 过高 调整'"
+                        ),
                     },
                     "court_level": {
                         "type": "string",
                         "description": "可选的法院层级过滤",
-                        "enum": ["最高人民法院", "高级人民法院", "中级人民法院", "基层人民法院"]
+                        "enum": ["最高人民法院", "高级人民法院", "中级人民法院", "基层人民法院"],
                     },
                     "case_type": {
                         "type": "string",
                         "description": "可选的案件类型",
-                        "enum": ["指导案例", "典型案例", "公报案例", "一般判例"]
-                    }
+                        "enum": ["指导案例", "典型案例", "公报案例", "一般判例"],
+                    },
                 },
-                "required": ["query"]
-            }
+                "required": ["query"],
+            },
         )
 
-    async def execute(self, arguments: Dict[str, Any], tool_call_id: str = "") -> ToolResult:
+    async def execute(self, arguments: dict[str, Any], tool_call_id: str = "") -> ToolResult:
         query = arguments.get("query", "")
         court_level = arguments.get("court_level")
         case_type = arguments.get("case_type")
 
         if not query:
             return ToolResult(
-                tool_call_id=tool_call_id,
-                tool_name=self.name,
-                success=False,
-                content="错误：检索关键词不能为空"
+                tool_call_id=tool_call_id, tool_name=self.name, success=False, content="错误：检索关键词不能为空"
             )
 
         # 检索匹配的案例
@@ -108,7 +104,7 @@ class CaseSearchTool(BaseTool):
                     "2. 此领域可能缺乏指导性案例\n"
                     "3. 建议通过中国裁判文书网或专业数据库进一步检索\n\n"
                     "⚠️ 注意：本工具案例库为预置典型案例，非实时全量数据库。"
-                )
+                ),
             )
 
         # 格式化结果
@@ -126,8 +122,7 @@ class CaseSearchTool(BaseTool):
             )
 
         output_parts.append(
-            "\n> ⚠️ 以上案例来源于预置典型案例库，仅供审查参考，"
-            "不构成法律依据。建议通过官方渠道核实最新判例。"
+            "\n> ⚠️ 以上案例来源于预置典型案例库，仅供审查参考，不构成法律依据。建议通过官方渠道核实最新判例。"
         )
 
         content = "\n\n---\n\n".join(output_parts)
@@ -137,19 +132,14 @@ class CaseSearchTool(BaseTool):
             tool_name=self.name,
             success=True,
             content=content,
-            metadata={"query": query, "result_count": len(results)}
+            metadata={"query": query, "result_count": len(results)},
         )
 
-    def _search_cases(
-        self,
-        query: str,
-        court_level: Optional[str] = None,
-        case_type: Optional[str] = None
-    ) -> List[Dict]:
+    def _search_cases(self, query: str, court_level: str | None = None, case_type: str | None = None) -> list[dict]:
         """检索案例（关键词 + 字符二元组混合匹配）"""
         query_lower = query.lower()
         query_words = [w for w in query_lower.split() if len(w) >= 2]
-        query_bigrams = set(query_lower[i:i + 2] for i in range(len(query_lower) - 1))
+        query_bigrams = set(query_lower[i : i + 2] for i in range(len(query_lower) - 1))
 
         results = []
         for case in self.cases:
@@ -173,7 +163,7 @@ class CaseSearchTool(BaseTool):
             direct_match = sum(3 for w in query_words if w in case_keywords_text)
 
             # 字符二元组 Jaccard 相似度（捕捉模糊匹配）
-            searchable_bigrams = set(searchable[i:i + 2] for i in range(len(searchable) - 1))
+            searchable_bigrams = set(searchable[i : i + 2] for i in range(len(searchable) - 1))
             if query_bigrams and searchable_bigrams:
                 bigram_score = len(query_bigrams & searchable_bigrams) / len(query_bigrams | searchable_bigrams)
                 bigram_score *= 5  # 归一化到与其他分数可比的量级

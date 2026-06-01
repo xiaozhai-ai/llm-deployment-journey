@@ -19,8 +19,10 @@ class LegalReviewError(Exception):
 # LLM 相关异常
 # ============================================
 
+
 class LLMError(LegalReviewError):
     """LLM 调用失败异常"""
+
     pass
 
 
@@ -63,8 +65,10 @@ class LLMResponseParseError(LLMError):
 # 文件解析异常
 # ============================================
 
+
 class ParsingError(LegalReviewError):
     """文件解析失败异常"""
+
     pass
 
 
@@ -74,7 +78,9 @@ class UnsupportedFormatError(ParsingError):
     def __init__(self, extension: str, supported: list = None):
         supported = supported or [".pdf", ".docx", ".txt"]
         message = f"不支持的文件格式: {extension}，支持的格式: {', '.join(supported)}"
-        super().__init__(message, error_code="UNSUPPORTED_FORMAT", context={"extension": extension, "supported": supported})
+        super().__init__(
+            message, error_code="UNSUPPORTED_FORMAT", context={"extension": extension, "supported": supported}
+        )
 
 
 class FileCorruptedError(ParsingError):
@@ -96,8 +102,10 @@ class FileTooLargeError(ParsingError):
 # 向量存储异常
 # ============================================
 
+
 class VectorStoreError(LegalReviewError):
     """向量数据库操作失败"""
+
     pass
 
 
@@ -119,8 +127,10 @@ class VectorSearchError(VectorStoreError):
 # 风险分析异常
 # ============================================
 
+
 class RiskAnalysisError(LegalReviewError):
     """风险分析失败"""
+
     pass
 
 
@@ -142,8 +152,10 @@ class RuleLoadError(RiskAnalysisError):
 # 修订生成异常
 # ============================================
 
+
 class RevisionError(LegalReviewError):
     """修订生成失败"""
+
     pass
 
 
@@ -157,6 +169,7 @@ class DOCXGenerationError(RevisionError):
 # ============================================
 # 工具调用异常
 # ============================================
+
 
 class ToolExecutionError(LegalReviewError):
     """工具执行失败"""

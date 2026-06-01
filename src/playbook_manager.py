@@ -6,10 +6,10 @@
 """
 
 import os
-import yaml
-from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 from enum import Enum
+
+import yaml
 
 from src.config import get_paths_config
 from src.logger import logger_manager
@@ -17,6 +17,7 @@ from src.logger import logger_manager
 
 class StrictnessLevel(Enum):
     """审查严格度"""
+
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -26,6 +27,7 @@ class StrictnessLevel(Enum):
 @dataclass
 class RiskWeightAdjustment:
     """风险权重调整"""
+
     rule_id: str
     adjusted_level: str  # critical/high/medium/low
     reason: str = ""
@@ -34,17 +36,18 @@ class RiskWeightAdjustment:
 @dataclass
 class Playbook:
     """审查策略"""
+
     id: str
     name: str
     description: str
     role: str  # party_a / party_b / neutral / custom
     strictness: StrictnessLevel
-    focus_areas: List[str] = field(default_factory=list)  # 重点关注领域
-    risk_weight_adjustments: Dict[str, RiskWeightAdjustment] = field(default_factory=dict)
-    excluded_rules: List[str] = field(default_factory=list)  # 排除的规则
-    required_clauses: List[str] = field(default_factory=list)  # 必须包含的条款
-    custom_prompts: Dict[str, str] = field(default_factory=dict)  # 自定义 LLM prompt 模板
-    metadata: Dict = field(default_factory=dict)
+    focus_areas: list[str] = field(default_factory=list)  # 重点关注领域
+    risk_weight_adjustments: dict[str, RiskWeightAdjustment] = field(default_factory=dict)
+    excluded_rules: list[str] = field(default_factory=list)  # 排除的规则
+    required_clauses: list[str] = field(default_factory=list)  # 必须包含的条款
+    custom_prompts: dict[str, str] = field(default_factory=dict)  # 自定义 LLM prompt 模板
+    metadata: dict = field(default_factory=dict)
 
     def adjust_risk_level(self, rule_id: str, original_level: str) -> str:
         """
@@ -75,15 +78,10 @@ class PlaybookManager:
     """策略管理器"""
 
     # 风险等级优先级（用于调整）
-    RISK_LEVEL_ORDER = {
-        "critical": 4,
-        "high": 3,
-        "medium": 2,
-        "low": 1
-    }
+    RISK_LEVEL_ORDER = {"critical": 4, "high": 3, "medium": 2, "low": 1}
 
-    def __init__(self, playbooks_dir: Optional[str] = None):
-        self.playbooks: Dict[str, Playbook] = {}
+    def __init__(self, playbooks_dir: str | None = None):
+        self.playbooks: dict[str, Playbook] = {}
         self.default_playbook_id = "neutral"
 
         if playbooks_dir:
@@ -106,7 +104,7 @@ class PlaybookManager:
             role="neutral",
             strictness=StrictnessLevel.MEDIUM,
             focus_areas=["条款完整性", "合规性", "格式条款"],
-            metadata={"builtin": True}
+            metadata={"builtin": True},
         )
 
         # 甲方策略
@@ -119,20 +117,16 @@ class PlaybookManager:
             focus_areas=["违约责任", "赔偿上限", "解除权", "知识产权归属", "保密条款"],
             risk_weight_adjustments={
                 "IMBALANCE_001": RiskWeightAdjustment(
-                    "IMBALANCE_001", "critical",
-                    "甲方视角：单方解除权不对等严重影响甲方利益"
+                    "IMBALANCE_001", "critical", "甲方视角：单方解除权不对等严重影响甲方利益"
                 ),
                 "IMBALANCE_002": RiskWeightAdjustment(
-                    "IMBALANCE_002", "critical",
-                    "甲方视角：违约责任不对等可能导致甲方损失无法弥补"
+                    "IMBALANCE_002", "critical", "甲方视角：违约责任不对等可能导致甲方损失无法弥补"
                 ),
                 "COMPLIANCE_002": RiskWeightAdjustment(
-                    "COMPLIANCE_002", "high",
-                    "甲方视角：过度免责条款可能使乙方逃避责任"
+                    "COMPLIANCE_002", "high", "甲方视角：过度免责条款可能使乙方逃避责任"
                 ),
                 "MISSING_CLAUSE_001": RiskWeightAdjustment(
-                    "MISSING_CLAUSE_001", "critical",
-                    "甲方视角：违约责任条款缺失是重大风险"
+                    "MISSING_CLAUSE_001", "critical", "甲方视角：违约责任条款缺失是重大风险"
                 ),
             },
             custom_prompts={
@@ -145,7 +139,7 @@ class PlaybookManager:
                     "5. 保密条款是否充分保护甲方商业秘密"
                 )
             },
-            metadata={"builtin": True}
+            metadata={"builtin": True},
         )
 
         # 乙方策略
@@ -158,24 +152,17 @@ class PlaybookManager:
             focus_areas=["责任限制", "付款条件", "甲方义务", "合理免责", "争议解决"],
             risk_weight_adjustments={
                 "IMBALANCE_001": RiskWeightAdjustment(
-                    "IMBALANCE_001", "critical",
-                    "乙方视角：甲方单方解除权可能导致乙方前期投入损失"
+                    "IMBALANCE_001", "critical", "乙方视角：甲方单方解除权可能导致乙方前期投入损失"
                 ),
                 "IMBALANCE_002": RiskWeightAdjustment(
-                    "IMBALANCE_002", "critical",
-                    "乙方视角：过重的违约责任可能对乙方不公平"
+                    "IMBALANCE_002", "critical", "乙方视角：过重的违约责任可能对乙方不公平"
                 ),
-                "FORMAT_001": RiskWeightAdjustment(
-                    "FORMAT_001", "high",
-                    "乙方视角：格式条款未提示可能隐藏不利内容"
-                ),
+                "FORMAT_001": RiskWeightAdjustment("FORMAT_001", "high", "乙方视角：格式条款未提示可能隐藏不利内容"),
                 "FORMAT_002": RiskWeightAdjustment(
-                    "FORMAT_002", "critical",
-                    "乙方视角：格式条款排除乙方权利必须重点关注"
+                    "FORMAT_002", "critical", "乙方视角：格式条款排除乙方权利必须重点关注"
                 ),
                 "IMBALANCE_003": RiskWeightAdjustment(
-                    "IMBALANCE_003", "high",
-                    "乙方视角：不利管辖条款增加乙方维权成本"
+                    "IMBALANCE_003", "high", "乙方视角：不利管辖条款增加乙方维权成本"
                 ),
             },
             custom_prompts={
@@ -188,7 +175,7 @@ class PlaybookManager:
                     "5. 乙方是否拥有合理的免责和限制责任条款"
                 )
             },
-            metadata={"builtin": True}
+            metadata={"builtin": True},
         )
 
         # 隐私合规专项策略
@@ -199,10 +186,7 @@ class PlaybookManager:
             role="neutral",
             strictness=StrictnessLevel.STRICT,
             focus_areas=["个人信息收集", "数据跨境", "用户权利", "安全措施", "合法性基础"],
-            required_clauses=[
-                "信息收集范围", "信息使用目的", "信息共享规则",
-                "信息安全措施", "用户权利", "联系方式"
-            ],
+            required_clauses=["信息收集范围", "信息使用目的", "信息共享规则", "信息安全措施", "用户权利", "联系方式"],
             custom_prompts={
                 "risk_analysis": (
                     "请从《个人信息保护法》《数据安全法》角度审查此文件。\n"
@@ -214,7 +198,7 @@ class PlaybookManager:
                     "5. 是否建立数据安全管理制度"
                 )
             },
-            metadata={"builtin": True, "industry": "privacy"}
+            metadata={"builtin": True, "industry": "privacy"},
         )
 
         # 劳动合同专项策略
@@ -236,7 +220,7 @@ class PlaybookManager:
                     "5. 竞业限制条款是否合理（期限、补偿金）"
                 )
             },
-            metadata={"builtin": True, "industry": "labor"}
+            metadata={"builtin": True, "industry": "labor"},
         )
 
     def _load_custom_playbooks(self):
@@ -245,7 +229,7 @@ class PlaybookManager:
             return
 
         for filename in os.listdir(self.playbooks_dir):
-            if filename.endswith('.yaml') or filename.endswith('.yml'):
+            if filename.endswith(".yaml") or filename.endswith(".yml"):
                 filepath = os.path.join(self.playbooks_dir, filename)
                 try:
                     playbook = self._load_playbook_from_yaml(filepath)
@@ -254,48 +238,45 @@ class PlaybookManager:
                 except Exception as e:
                     logger_manager.warning(f"加载策略文件失败 {filepath}: {e}")
 
-    def _load_playbook_from_yaml(self, filepath: str) -> Optional[Playbook]:
+    def _load_playbook_from_yaml(self, filepath: str) -> Playbook | None:
         """从 YAML 文件加载策略"""
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(filepath, encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
-        if not data or 'id' not in data:
+        if not data or "id" not in data:
             return None
 
         # 解析严格度（无效值降级为 MEDIUM）
         try:
-            strictness = StrictnessLevel(data.get('strictness', 'medium'))
+            strictness = StrictnessLevel(data.get("strictness", "medium"))
         except ValueError:
             logger_manager.warning(f"策略文件 {filepath} 的 strictness 值无效，降级为 medium")
             strictness = StrictnessLevel.MEDIUM
 
         # 解析风险权重调整
         risk_adjustments = {}
-        for rule_id, adj_data in data.get('risk_weight_adjustments', {}).items():
+        for rule_id, adj_data in data.get("risk_weight_adjustments", {}).items():
             if isinstance(adj_data, str):
-                risk_adjustments[rule_id] = RiskWeightAdjustment(
-                    rule_id=rule_id,
-                    adjusted_level=adj_data
-                )
+                risk_adjustments[rule_id] = RiskWeightAdjustment(rule_id=rule_id, adjusted_level=adj_data)
             elif isinstance(adj_data, dict):
                 risk_adjustments[rule_id] = RiskWeightAdjustment(
                     rule_id=rule_id,
-                    adjusted_level=adj_data.get('level', adj_data.get('adjusted_level', 'medium')),
-                    reason=adj_data.get('reason', '')
+                    adjusted_level=adj_data.get("level", adj_data.get("adjusted_level", "medium")),
+                    reason=adj_data.get("reason", ""),
                 )
 
         return Playbook(
-            id=data['id'],
-            name=data.get('name', data['id']),
-            description=data.get('description', ''),
-            role=data.get('role', 'neutral'),
+            id=data["id"],
+            name=data.get("name", data["id"]),
+            description=data.get("description", ""),
+            role=data.get("role", "neutral"),
             strictness=strictness,
-            focus_areas=data.get('focus_areas', []),
+            focus_areas=data.get("focus_areas", []),
             risk_weight_adjustments=risk_adjustments,
-            excluded_rules=data.get('excluded_rules', []),
-            required_clauses=data.get('required_clauses', []),
-            custom_prompts=data.get('custom_prompts', {}),
-            metadata=data.get('metadata', {})
+            excluded_rules=data.get("excluded_rules", []),
+            required_clauses=data.get("required_clauses", []),
+            custom_prompts=data.get("custom_prompts", {}),
+            metadata=data.get("metadata", {}),
         )
 
     def get_playbook(self, playbook_id: str) -> Playbook:
@@ -315,7 +296,7 @@ class PlaybookManager:
             raise KeyError(f"策略不存在: {playbook_id}")
         return self.playbooks[playbook_id]
 
-    def list_playbooks(self) -> List[Dict]:
+    def list_playbooks(self) -> list[dict]:
         """
         列出所有可用策略
 
@@ -323,31 +304,30 @@ class PlaybookManager:
             策略信息列表
         """
         result = []
-        for pid, pb in self.playbooks.items():
-            result.append({
-                'id': pb.id,
-                'name': pb.name,
-                'description': pb.description,
-                'role': pb.role,
-                'strictness': pb.strictness.value,
-                'focus_areas': pb.focus_areas,
-                'is_builtin': pb.metadata.get('builtin', False)
-            })
+        for _pid, pb in self.playbooks.items():
+            result.append(
+                {
+                    "id": pb.id,
+                    "name": pb.name,
+                    "description": pb.description,
+                    "role": pb.role,
+                    "strictness": pb.strictness.value,
+                    "focus_areas": pb.focus_areas,
+                    "is_builtin": pb.metadata.get("builtin", False),
+                }
+            )
         return result
 
-    def get_playbook_choices(self) -> List[tuple]:
+    def get_playbook_choices(self) -> list[tuple]:
         """
         获取策略选择列表（用于 UI Dropdown）
 
         Returns:
             [(显示名称, 策略ID), ...]
         """
-        return [
-            (pb.name, pb.id)
-            for pb in sorted(self.playbooks.values(), key=lambda x: x.id)
-        ]
+        return [(pb.name, pb.id) for pb in sorted(self.playbooks.values(), key=lambda x: x.id)]
 
-    def create_playbook_from_config(self, config: Dict) -> Playbook:
+    def create_playbook_from_config(self, config: dict) -> Playbook:
         """
         从配置字典创建策略
 
@@ -358,20 +338,20 @@ class PlaybookManager:
             Playbook 对象
         """
         playbook = Playbook(
-            id=config['id'],
-            name=config.get('name', config['id']),
-            description=config.get('description', ''),
-            role=config.get('role', 'neutral'),
-            strictness=StrictnessLevel(config.get('strictness', 'medium')),
-            focus_areas=config.get('focus_areas', []),
-            excluded_rules=config.get('excluded_rules', []),
-            required_clauses=config.get('required_clauses', []),
-            custom_prompts=config.get('custom_prompts', {}),
-            metadata=config.get('metadata', {})
+            id=config["id"],
+            name=config.get("name", config["id"]),
+            description=config.get("description", ""),
+            role=config.get("role", "neutral"),
+            strictness=StrictnessLevel(config.get("strictness", "medium")),
+            focus_areas=config.get("focus_areas", []),
+            excluded_rules=config.get("excluded_rules", []),
+            required_clauses=config.get("required_clauses", []),
+            custom_prompts=config.get("custom_prompts", {}),
+            metadata=config.get("metadata", {}),
         )
 
         # 解析风险权重调整
-        for rule_id, adj_data in config.get('risk_weight_adjustments', {}).items():
+        for rule_id, adj_data in config.get("risk_weight_adjustments", {}).items():
             if isinstance(adj_data, str):
                 playbook.risk_weight_adjustments[rule_id] = RiskWeightAdjustment(
                     rule_id=rule_id, adjusted_level=adj_data
@@ -379,8 +359,8 @@ class PlaybookManager:
             elif isinstance(adj_data, dict):
                 playbook.risk_weight_adjustments[rule_id] = RiskWeightAdjustment(
                     rule_id=rule_id,
-                    adjusted_level=adj_data.get('level', adj_data.get('adjusted_level', 'medium')),
-                    reason=adj_data.get('reason', '')
+                    adjusted_level=adj_data.get("level", adj_data.get("adjusted_level", "medium")),
+                    reason=adj_data.get("reason", ""),
                 )
 
         # 注册到管理器

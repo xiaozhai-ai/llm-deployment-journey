@@ -4,7 +4,7 @@
 - 支持关键词和语义混合搜索
 """
 
-from typing import Dict, Any, Optional
+from typing import Any
 
 from src.tools.base import BaseTool, ToolDefinition, ToolResult
 
@@ -45,31 +45,26 @@ class LegalSearchTool(BaseTool):
                     "query": {
                         "type": "string",
                         "description": (
-                            "检索关键词或问题描述。"
-                            "例如：'违约金上限'、'格式条款无效情形'、"
-                            "'个人信息跨境传输条件'"
-                        )
+                            "检索关键词或问题描述。例如：'违约金上限'、'格式条款无效情形'、'个人信息跨境传输条件'"
+                        ),
                     },
                     "category": {
                         "type": "string",
                         "description": "可选的分类过滤",
-                        "enum": ["合同", "个人信息保护", "数据安全", "消费者保护", "基本原则", "其他"]
-                    }
+                        "enum": ["合同", "个人信息保护", "数据安全", "消费者保护", "基本原则", "其他"],
+                    },
                 },
-                "required": ["query"]
-            }
+                "required": ["query"],
+            },
         )
 
-    async def execute(self, arguments: Dict[str, Any], tool_call_id: str = "") -> ToolResult:
+    async def execute(self, arguments: dict[str, Any], tool_call_id: str = "") -> ToolResult:
         query = arguments.get("query", "")
         category = arguments.get("category")
 
         if not query:
             return ToolResult(
-                tool_call_id=tool_call_id,
-                tool_name=self.name,
-                success=False,
-                content="错误：检索关键词不能为空"
+                tool_call_id=tool_call_id, tool_name=self.name, success=False, content="错误：检索关键词不能为空"
             )
 
         results = []
@@ -77,20 +72,18 @@ class LegalSearchTool(BaseTool):
         # 尝试向量检索
         if self.vector_store:
             try:
-                vector_results = self.vector_store.hybrid_search(
-                    query=query,
-                    top_k=5,
-                    category_filter=category
-                )
+                vector_results = self.vector_store.hybrid_search(query=query, top_k=5, category_filter=category)
                 for vr in vector_results:
                     meta = vr.metadata
-                    results.append({
-                        "law": meta.get("law", ""),
-                        "article": meta.get("article", ""),
-                        "title": meta.get("title", ""),
-                        "content": meta.get("content", ""),
-                        "score": round(vr.score, 3)
-                    })
+                    results.append(
+                        {
+                            "law": meta.get("law", ""),
+                            "article": meta.get("article", ""),
+                            "title": meta.get("title", ""),
+                            "content": meta.get("content", ""),
+                            "score": round(vr.score, 3),
+                        }
+                    )
             except Exception as e:
                 results.append({"error": f"向量检索失败: {str(e)}"})
 
@@ -103,7 +96,7 @@ class LegalSearchTool(BaseTool):
                 tool_call_id=tool_call_id,
                 tool_name=self.name,
                 success=True,
-                content=f"未找到与「{query}」直接相关的法条。建议：1. 调整检索关键词；2. 扩大分类范围；3. 此领域可能缺乏明确的成文法规定。"
+                content=f"未找到与「{query}」直接相关的法条。建议：1. 调整检索关键词；2. 扩大分类范围；3. 此领域可能缺乏明确的成文法规定。",
             )
 
         # 格式化结果
@@ -115,9 +108,7 @@ class LegalSearchTool(BaseTool):
                 continue
 
             output_parts.append(
-                f"**{i}. 《{r['law']}》{r['article']}（{r['title']}）**\n"
-                f"{r['content']}\n"
-                f"> 相关度: {r['score']:.0%}"
+                f"**{i}. 《{r['law']}》{r['article']}（{r['title']}）**\n{r['content']}\n> 相关度: {r['score']:.0%}"
             )
 
         content = "\n\n---\n\n".join(output_parts)
@@ -127,10 +118,10 @@ class LegalSearchTool(BaseTool):
             tool_name=self.name,
             success=True,
             content=content,
-            metadata={"query": query, "result_count": len(results)}
+            metadata={"query": query, "result_count": len(results)},
         )
 
-    def _keyword_search(self, query: str, category: Optional[str]) -> list:
+    def _keyword_search(self, query: str, category: str | None) -> list:
         """关键词回退搜索（中文字符 n-gram 匹配）"""
         results = []
         query_lower = query.lower()
@@ -163,13 +154,15 @@ class LegalSearchTool(BaseTool):
             else:
                 continue
 
-            results.append({
-                "law": provision.get("law", ""),
-                "article": provision.get("article", ""),
-                "title": provision.get("title", ""),
-                "content": provision.get("content", "")[:300],
-                "score": round(score, 3)
-            })
+            results.append(
+                {
+                    "law": provision.get("law", ""),
+                    "article": provision.get("article", ""),
+                    "title": provision.get("title", ""),
+                    "content": provision.get("content", "")[:300],
+                    "score": round(score, 3),
+                }
+            )
 
         results.sort(key=lambda x: x["score"], reverse=True)
         return results[:5]
@@ -181,4 +174,4 @@ class LegalSearchTool(BaseTool):
         cleaned = "".join(c for c in text if c.isalnum())
         if len(cleaned) < n:
             return {cleaned} if cleaned else set()
-        return {cleaned[i:i + n] for i in range(len(cleaned) - n + 1)}
+        return {cleaned[i : i + n] for i in range(len(cleaned) - n + 1)}

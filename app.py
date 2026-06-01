@@ -9,29 +9,32 @@
 
 # 初始化日志（必须在其他模块导入之前）
 from src.logger import logger_manager
+
 logger_manager.initialize(log_dir="logs", enable_json_log=True)
 
 import atexit
 import os
 import socket
-from src.config import get_settings, get_llm_config, get_paths_config
-from src.parser import DocumentParser
-from src.security import SecurityPreprocessor
-from src.vector_store import VectorStore
-from src.risk_engine import RiskEngine
-from src.legal_matcher import LegalMatcher
-from src.report import ReportGenerator
-from src.redliner import Redliner
-from src.llm_client import LLMClient
-from src.playbook_manager import PlaybookManager
-from src.chat_memory import ChatMemory
+
 from src.agent_loop import AgentLoop
+from src.chat_memory import ChatMemory
+from src.config import get_llm_config, get_paths_config, get_settings
+from src.legal_matcher import LegalMatcher
+from src.llm_client import LLMClient
+from src.parser import DocumentParser
+from src.playbook_manager import PlaybookManager
+from src.redliner import Redliner
+from src.report import ReportGenerator
+from src.risk_engine import RiskEngine
+from src.security import SecurityPreprocessor
 from src.task_runner import TaskRunner
 from src.ui.layout import create_ui
+from src.vector_store import VectorStore
 
 # 初始化反馈存储目录
 try:
     from src.feedback_store import get_feedback_store
+
     get_feedback_store()
 except Exception as e:
     logger_manager.warning(f"反馈存储初始化失败: {e}")
@@ -104,7 +107,7 @@ agent_loop = AgentLoop(
     legal_matcher=legal_matcher,
     report_gen=report_gen,
     redliner=redliner,
-    llm_client_factory=llm_client_factory
+    llm_client_factory=llm_client_factory,
 )
 
 
@@ -122,6 +125,7 @@ app = create_ui(
 )
 
 if __name__ == "__main__":
+
     def _find_free_port(start: int, end: int) -> int:
         for port in range(start, end + 1):
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:

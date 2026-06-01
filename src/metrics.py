@@ -5,11 +5,9 @@
 - 按任务/会话聚合
 """
 
-import time
 import threading
-from typing import List, Optional
+import time
 from dataclasses import dataclass, field
-
 
 # 常见 LLM 模型定价（每百万 Token 价格，人民币）
 # 基于通义千问 2025 年定价，可根据实际使用更新
@@ -31,6 +29,7 @@ MODEL_PRICING = {
 @dataclass
 class LLMCallRecord:
     """单次 LLM 调用记录"""
+
     model: str
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -44,6 +43,7 @@ class LLMCallRecord:
 @dataclass
 class StageTiming:
     """阶段耗时"""
+
     stage_name: str
     start_time: float = 0.0
     end_time: float = 0.0
@@ -53,12 +53,13 @@ class StageTiming:
 @dataclass
 class ReviewMetrics:
     """审查指标汇总"""
+
     task_id: str = ""
     filename: str = ""
 
     # 耗时
     total_duration_ms: float = 0.0
-    stage_timings: List[StageTiming] = field(default_factory=list)
+    stage_timings: list[StageTiming] = field(default_factory=list)
 
     # LLM 调用
     llm_call_count: int = 0
@@ -66,7 +67,7 @@ class ReviewMetrics:
     total_completion_tokens: int = 0
     total_tokens: int = 0
     estimated_cost_cny: float = 0.0
-    llm_calls: List[LLMCallRecord] = field(default_factory=list)
+    llm_calls: list[LLMCallRecord] = field(default_factory=list)
 
     # 工具调用
     tool_call_count: int = 0
@@ -81,13 +82,11 @@ class ReviewMetrics:
 
     def add_stage(self, stage_name: str, duration_ms: float):
         """添加阶段耗时"""
-        self.stage_timings.append(StageTiming(
-            stage_name=stage_name,
-            duration_ms=duration_ms
-        ))
+        self.stage_timings.append(StageTiming(stage_name=stage_name, duration_ms=duration_ms))
 
-    def add_llm_call(self, model: str, prompt_tokens: int, completion_tokens: int,
-                     duration_ms: float = 0.0, purpose: str = ""):
+    def add_llm_call(
+        self, model: str, prompt_tokens: int, completion_tokens: int, duration_ms: float = 0.0, purpose: str = ""
+    ):
         """添加 LLM 调用记录"""
         total_tokens = prompt_tokens + completion_tokens
 
@@ -102,7 +101,7 @@ class ReviewMetrics:
             cost_cny=cost,
             duration_ms=duration_ms,
             purpose=purpose,
-            timestamp=time.time()
+            timestamp=time.time(),
         )
 
         self.llm_calls.append(record)
@@ -148,7 +147,7 @@ class ReviewMetrics:
             for stage in self.stage_timings:
                 if stage.duration_ms > 0:
                     pct = (stage.duration_ms / self.total_duration_ms * 100) if self.total_duration_ms > 0 else 0
-                    lines.append(f"- {stage.stage_name}: {stage.duration_ms/1000:.1f}s ({pct:.0f}%)")
+                    lines.append(f"- {stage.stage_name}: {stage.duration_ms / 1000:.1f}s ({pct:.0f}%)")
 
         return "\n".join(lines)
 
@@ -158,21 +157,29 @@ class ReviewMetrics:
 
         html = []
         html.append('<div class="metrics-dashboard">')
-        html.append('<style>')
+        html.append("<style>")
         html.append('.metrics-dashboard { font-family: "Microsoft YaHei", sans-serif; padding: 15px; }')
-        html.append('.metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 15px 0; }')
-        html.append('.metric-card { background: #f8f9fa; border-radius: 8px; padding: 15px; text-align: center; border: 1px solid #dee2e6; }')
-        html.append('.metric-card .value { font-size: 2em; font-weight: bold; color: #0d6efd; }')
-        html.append('.metric-card .label { font-size: 0.9em; color: #6c757d; margin-top: 5px; }')
-        html.append('.metric-card.cost .value { color: #dc3545; }')
-        html.append('.metric-card.time .value { color: #198754; }')
-        html.append('.metric-card.calls .value { color: #6f42c1; }')
-        html.append('.stage-bar { margin: 5px 0; display: flex; align-items: center; }')
-        html.append('.stage-bar .name { width: 120px; font-size: 0.9em; }')
-        html.append('.stage-bar .bar { flex: 1; height: 20px; background: #e9ecef; border-radius: 4px; overflow: hidden; }')
-        html.append('.stage-bar .bar-fill { height: 100%; background: #0d6efd; border-radius: 4px; transition: width 0.3s; }')
-        html.append('.stage-bar .time { width: 80px; text-align: right; font-size: 0.85em; color: #6c757d; }')
-        html.append('</style>')
+        html.append(
+            ".metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 15px 0; }"
+        )
+        html.append(
+            ".metric-card { background: #f8f9fa; border-radius: 8px; padding: 15px; text-align: center; border: 1px solid #dee2e6; }"
+        )
+        html.append(".metric-card .value { font-size: 2em; font-weight: bold; color: #0d6efd; }")
+        html.append(".metric-card .label { font-size: 0.9em; color: #6c757d; margin-top: 5px; }")
+        html.append(".metric-card.cost .value { color: #dc3545; }")
+        html.append(".metric-card.time .value { color: #198754; }")
+        html.append(".metric-card.calls .value { color: #6f42c1; }")
+        html.append(".stage-bar { margin: 5px 0; display: flex; align-items: center; }")
+        html.append(".stage-bar .name { width: 120px; font-size: 0.9em; }")
+        html.append(
+            ".stage-bar .bar { flex: 1; height: 20px; background: #e9ecef; border-radius: 4px; overflow: hidden; }"
+        )
+        html.append(
+            ".stage-bar .bar-fill { height: 100%; background: #0d6efd; border-radius: 4px; transition: width 0.3s; }"
+        )
+        html.append(".stage-bar .time { width: 80px; text-align: right; font-size: 0.85em; color: #6c757d; }")
+        html.append("</style>")
 
         # 核心指标卡片
         html.append('<div class="metrics-grid">')
@@ -180,63 +187,63 @@ class ReviewMetrics:
         html.append('<div class="metric-card time">')
         html.append(f'<div class="value">{total_sec:.1f}s</div>')
         html.append('<div class="label">⏱️ 总耗时</div>')
-        html.append('</div>')
+        html.append("</div>")
 
         html.append('<div class="metric-card calls">')
         html.append(f'<div class="value">{self.llm_call_count}</div>')
         html.append('<div class="label">🤖 LLM 调用次数</div>')
-        html.append('</div>')
+        html.append("</div>")
 
         html.append('<div class="metric-card">')
         html.append(f'<div class="value">{self.total_tokens:,}</div>')
         html.append('<div class="label">📝 总 Token 消耗</div>')
-        html.append('</div>')
+        html.append("</div>")
 
         html.append('<div class="metric-card cost">')
         html.append(f'<div class="value">¥{self.estimated_cost_cny:.4f}</div>')
         html.append('<div class="label">💰 估算费用</div>')
-        html.append('</div>')
+        html.append("</div>")
 
         html.append('<div class="metric-card">')
         html.append(f'<div class="value">{self.clause_count}</div>')
         html.append('<div class="label">📑 条款数量</div>')
-        html.append('</div>')
+        html.append("</div>")
 
         html.append('<div class="metric-card">')
         html.append(f'<div class="value">{self.risk_count}</div>')
         html.append('<div class="label">⚠️ 风险点</div>')
-        html.append('</div>')
+        html.append("</div>")
 
-        html.append('</div>')  # end metrics-grid
+        html.append("</div>")  # end metrics-grid
 
         # Token 明细
         html.append('<div style="margin: 15px 0; font-size: 0.9em; color: #6c757d;">')
-        html.append(f'📥 输入 Token: <b>{self.total_prompt_tokens:,}</b> | ')
-        html.append(f'📤 输出 Token: <b>{self.total_completion_tokens:,}</b> | ')
-        html.append(f'🔧 工具调用: <b>{self.tool_call_count}</b> 次')
-        html.append('</div>')
+        html.append(f"📥 输入 Token: <b>{self.total_prompt_tokens:,}</b> | ")
+        html.append(f"📤 输出 Token: <b>{self.total_completion_tokens:,}</b> | ")
+        html.append(f"🔧 工具调用: <b>{self.tool_call_count}</b> 次")
+        html.append("</div>")
 
         # 各阶段耗时瀑布图
         if self.stage_timings:
-            html.append('<h4>⏱️ 各阶段耗时</h4>')
+            html.append("<h4>⏱️ 各阶段耗时</h4>")
             max_duration = max((s.duration_ms for s in self.stage_timings), default=1)
 
             for stage in self.stage_timings:
                 if stage.duration_ms <= 0:
                     continue
-                pct = (stage.duration_ms / max_duration * 100)
-                time_str = f"{stage.duration_ms/1000:.1f}s"
+                pct = stage.duration_ms / max_duration * 100
+                time_str = f"{stage.duration_ms / 1000:.1f}s"
                 html.append(
                     f'<div class="stage-bar">'
                     f'<span class="name">{stage.stage_name}</span>'
                     f'<div class="bar"><div class="bar-fill" style="width: {pct}%"></div></div>'
                     f'<span class="time">{time_str}</span>'
-                    f'</div>'
+                    f"</div>"
                 )
 
         # LLM 调用明细
         if self.llm_calls:
-            html.append('<h4>🤖 LLM 调用明细</h4>')
+            html.append("<h4>🤖 LLM 调用明细</h4>")
             html.append('<table style="width:100%; border-collapse: collapse; font-size: 0.85em;">')
             html.append('<tr style="border-bottom: 1px solid #dee2e6;">')
             html.append('<th style="text-align: left; padding: 5px;">用途</th>')
@@ -244,22 +251,22 @@ class ReviewMetrics:
             html.append('<th style="text-align: right; padding: 5px;">Token</th>')
             html.append('<th style="text-align: right; padding: 5px;">耗时</th>')
             html.append('<th style="text-align: right; padding: 5px;">费用</th>')
-            html.append('</tr>')
+            html.append("</tr>")
 
             for call in self.llm_calls:
                 html.append('<tr style="border-bottom: 1px solid #f0f0f0;">')
                 html.append(f'<td style="padding: 5px;">{call.purpose or "通用"}</td>')
                 html.append(f'<td style="text-align: right; padding: 5px;">{call.model}</td>')
                 html.append(f'<td style="text-align: right; padding: 5px;">{call.total_tokens:,}</td>')
-                html.append(f'<td style="text-align: right; padding: 5px;">{call.duration_ms/1000:.1f}s</td>')
+                html.append(f'<td style="text-align: right; padding: 5px;">{call.duration_ms / 1000:.1f}s</td>')
                 html.append(f'<td style="text-align: right; padding: 5px;">¥{call.cost_cny:.4f}</td>')
-                html.append('</tr>')
+                html.append("</tr>")
 
-            html.append('</table>')
+            html.append("</table>")
 
-        html.append('</div>')  # end metrics-dashboard
+        html.append("</div>")  # end metrics-dashboard
 
-        return '\n'.join(html)
+        return "\n".join(html)
 
 
 class MetricsCollector:
@@ -284,7 +291,8 @@ class MetricsCollector:
 
     class _StageContext:
         """阶段上下文（用于 with 语句）"""
-        def __init__(self, collector: 'MetricsCollector', stage_name: str):
+
+        def __init__(self, collector: "MetricsCollector", stage_name: str):
             self.collector = collector
             self.stage_name = stage_name
             self.start_time = 0.0
@@ -308,12 +316,7 @@ class MetricsCollector:
         return self._StageContext(self, stage_name)
 
     def record_llm_call(
-        self,
-        model: str,
-        prompt_tokens: int,
-        completion_tokens: int,
-        duration_ms: float = 0.0,
-        purpose: str = ""
+        self, model: str, prompt_tokens: int, completion_tokens: int, duration_ms: float = 0.0, purpose: str = ""
     ):
         """记录 LLM 调用"""
         with self._lock:
@@ -322,7 +325,7 @@ class MetricsCollector:
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 duration_ms=duration_ms,
-                purpose=purpose
+                purpose=purpose,
             )
 
     def record_tool_call(self):
@@ -355,15 +358,17 @@ class MetricsCollector:
 
 
 # 全局收集器（当前任务），线程安全
-_current_collector: Optional[MetricsCollector] = None
+_current_collector: MetricsCollector | None = None
 _collector_lock = threading.Lock()
 
-def get_current_collector() -> Optional[MetricsCollector]:
+
+def get_current_collector() -> MetricsCollector | None:
     """获取当前任务的指标收集器"""
     with _collector_lock:
         return _current_collector
 
-def set_current_collector(collector: Optional[MetricsCollector]):
+
+def set_current_collector(collector: MetricsCollector | None):
     """设置当前任务的指标收集器"""
     global _current_collector
     with _collector_lock:

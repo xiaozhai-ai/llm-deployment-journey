@@ -10,12 +10,11 @@ LegalMatcher 单元测试
 - 法条格式化
 """
 
-import os
-import tempfile
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-from src.legal_matcher import LegalMatcher, LegalProvision, LegalMatch
+import pytest
+
+from src.legal_matcher import LegalMatcher
 
 
 @pytest.fixture
@@ -74,7 +73,7 @@ legal_provisions:
       - "免责"
 """
     path = tmp_path / "legal_kb.yaml"
-    path.write_text(content, encoding='utf-8')
+    path.write_text(content, encoding="utf-8")
     return str(path)
 
 
@@ -87,6 +86,7 @@ def matcher(kb_path, mock_vector_store):
 # ============================================
 # 知识库加载
 # ============================================
+
 
 class TestKnowledgeBaseLoading:
     """知识库加载测试"""
@@ -117,6 +117,7 @@ class TestKnowledgeBaseLoading:
 # ============================================
 # 关键词搜索
 # ============================================
+
 
 class TestKeywordSearch:
     """关键词搜索测试"""
@@ -158,6 +159,7 @@ class TestKeywordSearch:
 # 按引用获取法条
 # ============================================
 
+
 class TestGetProvisionByCitation:
     """按引用获取法条测试"""
 
@@ -182,15 +184,14 @@ class TestGetProvisionByCitation:
 # 关键词相关度计算
 # ============================================
 
+
 class TestKeywordRelevance:
     """关键词相关度计算测试"""
 
     def test_high_relevance(self, matcher):
         """多个关键词命中 → 高相关度"""
         provision = matcher.provisions[0]  # 违约责任
-        score = matcher._calculate_keyword_relevance(
-            "违约责任 赔偿损失 违约", provision, "合同法"
-        )
+        score = matcher._calculate_keyword_relevance("违约责任 赔偿损失 违约", provision, "合同法")
         assert score > 0.5
 
     def test_category_match_bonus(self, matcher):
@@ -219,6 +220,7 @@ class TestKeywordRelevance:
 # 匹配原因
 # ============================================
 
+
 class TestMatchReason:
     """匹配原因生成测试"""
 
@@ -240,6 +242,7 @@ class TestMatchReason:
 # 法条格式化
 # ============================================
 
+
 class TestFormatCitation:
     """法条引用格式化测试"""
 
@@ -255,6 +258,7 @@ class TestFormatCitation:
 # ============================================
 # 分类和法律名称
 # ============================================
+
 
 class TestCategoriesAndLaws:
     """分类和法律名称获取测试"""
@@ -283,6 +287,7 @@ class TestCategoriesAndLaws:
 # 混合检索（mock vector store）
 # ============================================
 
+
 class TestHybridSearch:
     """混合检索测试"""
 
@@ -292,13 +297,18 @@ class TestHybridSearch:
 
         mock_vector_store.hybrid_search.return_value = [
             VectorSearchResult(
-                id="1", content="违约责任",
+                id="1",
+                content="违约责任",
                 metadata={
-                    "law": "民法典", "article": "第五百七十七条",
-                    "title": "违约责任", "content": "当事人一方不履行合同义务...",
-                    "category": "合同法", "keywords": "违约责任,违约"
+                    "law": "民法典",
+                    "article": "第五百七十七条",
+                    "title": "违约责任",
+                    "content": "当事人一方不履行合同义务...",
+                    "category": "合同法",
+                    "keywords": "违约责任,违约",
                 },
-                distance=0.3, score=0.7
+                distance=0.3,
+                score=0.7,
             )
         ]
 

@@ -19,9 +19,14 @@ select = [
     "SIM", # flake8-simplify
 ]
 ignore = [
-    "E501",   # line too long (handled by formatter)
-    "SIM108", # ternary operator (readability trade-off)
-    "B008",   # function call in default argument (FastAPI/Gradio pattern)
+    "E402",    # module level import not at top (logger init must precede other imports)
+    "E501",    # line too long (handled by formatter)
+    "SIM108",  # ternary operator (readability trade-off)
+    "SIM102",  # nested if → single if (readability trade-off)
+    "SIM105",  # try-except-pass → contextlib.suppress (readability trade-off)
+    "SIM115",  # use context manager for open (not always applicable)
+    "SIM118",  # key in dict.keys() (sometimes clearer with .keys())
+    "B008",    # function call in default argument (FastAPI/Gradio pattern)
 ]
 
 [tool.ruff.lint.isort]

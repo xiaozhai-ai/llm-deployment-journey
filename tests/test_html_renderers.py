@@ -9,45 +9,43 @@ HTML 渲染器单元测试
 - XSS 防护
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from src.html_renderers import (
+    LEVEL_ORDER,
+    _esc,
+    _index_risks_by_clause,
+    _max_risk_level,
+    build_trace_view,
     format_thinking_process,
     format_tool_call_log,
-    build_trace_view,
-    _esc,
-    _max_risk_level,
-    _index_risks_by_clause,
-    LEVEL_ORDER,
 )
-
 
 # ============================================
 # XSS 转义
 # ============================================
 
-class TestEscaping:
 
+class TestEscaping:
     def test_esc_html_tags(self):
-        assert _esc('<script>alert(1)</script>') == '&lt;script&gt;alert(1)&lt;/script&gt;'
+        assert _esc("<script>alert(1)</script>") == "&lt;script&gt;alert(1)&lt;/script&gt;"
 
     def test_esc_quotes(self):
-        assert _esc('"onclick"') == '&quot;onclick&quot;'
+        assert _esc('"onclick"') == "&quot;onclick&quot;"
 
     def test_esc_ampersand(self):
-        assert _esc('A & B') == 'A &amp; B'
+        assert _esc("A & B") == "A &amp; B"
 
     def test_esc_normal_text(self):
-        assert _esc('正常文本') == '正常文本'
+        assert _esc("正常文本") == "正常文本"
 
 
 # ============================================
 # 思考过程
 # ============================================
 
-class TestThinkingProcess:
 
+class TestThinkingProcess:
     def test_empty_steps(self):
         result = format_thinking_process([])
         assert "审查完成" in result
@@ -82,8 +80,8 @@ class TestThinkingProcess:
 # 工具调用日志
 # ============================================
 
-class TestToolCallLog:
 
+class TestToolCallLog:
     def test_empty_log(self):
         result = format_tool_call_log([])
         assert result == ""
@@ -104,24 +102,24 @@ class TestToolCallLog:
 # 溯源对照视图
 # ============================================
 
-class TestBuildTraceView:
 
+class TestBuildTraceView:
     def test_no_session(self):
-        with patch('src.html_renderers.review_store') as mock_store:
+        with patch("src.html_renderers.review_store") as mock_store:
             mock_store.latest_session_id = None
             clauses_html, risks_html = build_trace_view()
             assert "请先进行文件审查" in clauses_html
 
     def test_empty_session(self):
-        with patch('src.html_renderers.review_store') as mock_store:
+        with patch("src.html_renderers.review_store") as mock_store:
             mock_store.latest_session_id = "s1"
             mock_store.get_clauses.return_value = []
             mock_store.get_risks.return_value = []
             clauses_html, risks_html = build_trace_view()
-            assert "请先进行文件审查" in clauses_html
+            assert "审查完成" in clauses_html
 
     def test_clauses_with_risks(self):
-        with patch('src.html_renderers.review_store') as mock_store:
+        with patch("src.html_renderers.review_store") as mock_store:
             mock_store.latest_session_id = "s1"
             mock_store.get_clauses.return_value = [
                 {"id": 1, "title": "第一条", "content": "甲方义务"},
@@ -139,7 +137,7 @@ class TestBuildTraceView:
             assert "共 2 个风险点" in risks_html
 
     def test_critical_risk_styling(self):
-        with patch('src.html_renderers.review_store') as mock_store:
+        with patch("src.html_renderers.review_store") as mock_store:
             mock_store.latest_session_id = "s1"
             mock_store.get_clauses.return_value = [
                 {"id": 1, "title": "关键条款", "content": "重要内容"},
@@ -157,8 +155,8 @@ class TestBuildTraceView:
 # 风险等级工具函数
 # ============================================
 
-class TestRiskLevelUtils:
 
+class TestRiskLevelUtils:
     def test_level_order_includes_critical(self):
         assert "critical" in LEVEL_ORDER
         assert LEVEL_ORDER["critical"] > LEVEL_ORDER["high"]

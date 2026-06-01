@@ -7,19 +7,19 @@
 - 增强版：统一异常处理 + 降级策略
 """
 
+import hashlib
 import os
 import threading
-import hashlib
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Set
 from dataclasses import dataclass
+from pathlib import Path
 
-from src.legal_terms import get_legal_terms, expand_query, FORCE_RECALL_TERMS
-from src.exceptions import VectorStoreInitError, VectorSearchError
+from src.exceptions import VectorSearchError, VectorStoreInitError
+from src.legal_terms import FORCE_RECALL_TERMS, expand_query, get_legal_terms
 from src.logger import logger_manager
 
 try:
     import chromadb
+
     CHROMA_AVAILABLE = True
 except ImportError:
     CHROMA_AVAILABLE = False
@@ -31,9 +31,10 @@ ONNX_MODEL_FILE = Path.home() / ".cache" / "chroma" / "onnx_models" / "all-MiniL
 @dataclass
 class VectorSearchResult:
     """向量检索结果"""
+
     id: str
     content: str
-    metadata: Dict
+    metadata: dict
     distance: float
     score: float
 
@@ -48,14 +49,8 @@ class VectorStore:
 
     COLLECTION_NAME = "legal_provisions"
 
-    def __init__(
-        self,
-        persist_dir: Optional[str] = None,
-        embedding_model: Optional[str] = None
-    ):
-        self.persist_dir = persist_dir or os.path.join(
-            os.path.dirname(__file__), '..', 'chroma_db'
-        )
+    def __init__(self, persist_dir: str | None = None, embedding_model: str | None = None):
+        self.persist_dir = persist_dir or os.path.join(os.path.dirname(__file__), "..", "chroma_db")
         self.embedding_model = embedding_model
         self.client = None
         self.collection = None
@@ -63,9 +58,9 @@ class VectorStore:
         self._model_ready = False
 
         # 关键词索引（用于精确匹配和强制召回）
-        self._keyword_index: Dict[str, Dict] = {}
+        self._keyword_index: dict[str, dict] = {}
         # 关键词→法条ID 反向索引
-        self._term_to_ids: Dict[str, Set[str]] = {}
+        self._term_to_ids: dict[str, set[str]] = {}
         self._index_lock = threading.Lock()
 
     def initialize(self):
@@ -102,22 +97,15 @@ class VectorStore:
             logger_manager.debug(f"集合 {self.COLLECTION_NAME} 不存在，将创建新集合: {e}")
             try:
                 self.collection = self.client.create_collection(
-                    name=self.COLLECTION_NAME,
-                    metadata={"description": "中国法律法规知识库"}
+                    name=self.COLLECTION_NAME, metadata={"description": "中国法律法规知识库"}
                 )
                 logger_manager.info(f"创建新集合: {self.COLLECTION_NAME}")
             except Exception as e:
                 logger_manager.error(f"创建 ChromaDB 集合失败: {e}")
-                raise VectorStoreInitError(f"创建向量集合失败: {e}")
+                raise VectorStoreInitError(f"创建向量集合失败: {e}") from e
 
     def add_provision(
-        self,
-        law: str,
-        article: str,
-        title: str,
-        content: str,
-        category: str = "",
-        keywords: List[str] = None
+        self, law: str, article: str, title: str, content: str, category: str = "", keywords: list[str] = None
     ) -> str:
         """添加法条到向量库"""
         self.initialize()
@@ -134,7 +122,7 @@ class VectorStore:
             "title": title,
             "category": category,
             "keywords": ",".join(keywords) if keywords else "",
-            "content": content
+            "content": content,
         }
 
         # 删除旧条目
@@ -147,14 +135,10 @@ class VectorStore:
         # 添加到向量库
         if CHROMA_AVAILABLE and self.collection:
             try:
-                self.collection.add(
-                    documents=[document],
-                    metadatas=[metadata],
-                    ids=[entry_id]
-                )
+                self.collection.add(documents=[document], metadatas=[metadata], ids=[entry_id])
             except RuntimeError as e:
                 if "downloading" in str(e).lower() or "not found" in str(e).lower():
-                    if not hasattr(self, '_model_warned'):
+                    if not hasattr(self, "_model_warned"):
                         logger_manager.info("嵌入模型下载中，法条暂存关键词索引，模型就绪后自动补入向量库")
                         self._model_warned = True
                 else:
@@ -169,7 +153,7 @@ class VectorStore:
                 "content": content,
                 "category": category,
                 "keywords": keywords or [],
-                "search_text": f"{law} {article} {title} {content} {' '.join(keywords or [])}".lower()
+                "search_text": f"{law} {article} {title} {content} {' '.join(keywords or [])}".lower(),
             }
 
             # 更新反向索引
@@ -187,25 +171,20 @@ class VectorStore:
 
         return entry_id
 
-    def add_provisions_batch(self, provisions: List[Dict]):
+    def add_provisions_batch(self, provisions: list[dict]):
         """批量添加法条"""
         self.initialize()
         for p in provisions:
             self.add_provision(
-                law=p.get('law', ''),
-                article=p.get('article', ''),
-                title=p.get('title', ''),
-                content=p.get('content', ''),
-                category=p.get('category', ''),
-                keywords=p.get('keywords', [])
+                law=p.get("law", ""),
+                article=p.get("article", ""),
+                title=p.get("title", ""),
+                content=p.get("content", ""),
+                category=p.get("category", ""),
+                keywords=p.get("keywords", []),
             )
 
-    def search(
-        self,
-        query: str,
-        top_k: int = 5,
-        category_filter: Optional[str] = None
-    ) -> List[VectorSearchResult]:
+    def search(self, query: str, top_k: int = 5, category_filter: str | None = None) -> list[VectorSearchResult]:
         """检索相关法条"""
         return self.hybrid_search(query, top_k, category_filter)
 
@@ -213,10 +192,10 @@ class VectorStore:
         self,
         query: str,
         top_k: int = 5,
-        category_filter: Optional[str] = None,
+        category_filter: str | None = None,
         vector_weight: float = 0.7,
-        keyword_weight: float = 0.3
-    ) -> List[VectorSearchResult]:
+        keyword_weight: float = 0.3,
+    ) -> list[VectorSearchResult]:
         """
         多路召回 + RRF 融合排序
 
@@ -229,7 +208,7 @@ class VectorStore:
         """
         self.initialize()
 
-        all_results: Dict[str, Tuple[VectorSearchResult, float, float]] = {}
+        all_results: dict[str, tuple[VectorSearchResult, float, float]] = {}
 
         # 路1: 向量语义检索（可能失败，自动降级）
         if CHROMA_AVAILABLE and self.collection:
@@ -252,7 +231,7 @@ class VectorStore:
                     all_results[r.id] = (r, 0.0, r.score)
         except Exception as e:
             logger_manager.error(f"关键词检索失败: {e}")
-            raise VectorSearchError(f"关键词检索失败: {e}")
+            raise VectorSearchError(f"关键词检索失败: {e}") from e
 
         # 路3: 法律术语强制召回
         try:
@@ -275,12 +254,8 @@ class VectorStore:
         return final_results
 
     def _vector_search(
-        self,
-        query: str,
-        top_k: int,
-        category_filter: Optional[str] = None,
-        min_score: float = 0.3
-    ) -> List[VectorSearchResult]:
+        self, query: str, top_k: int, category_filter: str | None = None, min_score: float = 0.3
+    ) -> list[VectorSearchResult]:
         """向量语义检索"""
         try:
             where = None
@@ -288,26 +263,25 @@ class VectorStore:
                 where = {"category": category_filter}
 
             results = self.collection.query(
-                query_texts=[query],
-                n_results=top_k,
-                where=where,
-                include=["documents", "metadatas", "distances"]
+                query_texts=[query], n_results=top_k, where=where, include=["documents", "metadatas", "distances"]
             )
 
             search_results = []
-            for i, doc_id in enumerate(results['ids'][0]):
-                distance = results['distances'][0][i]
-                metadata = results['metadatas'][0][i]
+            for i, doc_id in enumerate(results["ids"][0]):
+                distance = results["distances"][0][i]
+                metadata = results["metadatas"][0][i]
                 score = max(0, 1 - distance)
 
                 if score >= min_score:
-                    search_results.append(VectorSearchResult(
-                        id=doc_id,
-                        content=metadata.get('content', ''),
-                        metadata=metadata,
-                        distance=distance,
-                        score=score
-                    ))
+                    search_results.append(
+                        VectorSearchResult(
+                            id=doc_id,
+                            content=metadata.get("content", ""),
+                            metadata=metadata,
+                            distance=distance,
+                            score=score,
+                        )
+                    )
 
             return search_results
 
@@ -316,11 +290,8 @@ class VectorStore:
             return []
 
     def _keyword_search_expanded(
-        self,
-        query: str,
-        top_k: int,
-        category_filter: Optional[str] = None
-    ) -> List[VectorSearchResult]:
+        self, query: str, top_k: int, category_filter: str | None = None
+    ) -> list[VectorSearchResult]:
         """
         关键词检索（含法律术语查询扩展）
 
@@ -331,37 +302,28 @@ class VectorStore:
 
         results = []
         for entry_id, entry in self._keyword_index.items():
-            if category_filter and entry.get('category') != category_filter:
+            if category_filter and entry.get("category") != category_filter:
                 continue
 
-            score = self._keyword_relevance_expanded(
-                query, expanded_terms, entry
-            )
+            score = self._keyword_relevance_expanded(query, expanded_terms, entry)
 
             if score > 0.1:
-                results.append(VectorSearchResult(
-                    id=entry_id,
-                    content=entry['content'],
-                    metadata=entry,
-                    distance=1 - score,
-                    score=score
-                ))
+                results.append(
+                    VectorSearchResult(
+                        id=entry_id, content=entry["content"], metadata=entry, distance=1 - score, score=score
+                    )
+                )
 
         results.sort(key=lambda x: x.score, reverse=True)
         return results[:top_k]
 
-    def _keyword_relevance_expanded(
-        self,
-        query: str,
-        expanded_terms: List[str],
-        entry: Dict
-    ) -> float:
+    def _keyword_relevance_expanded(self, query: str, expanded_terms: list[str], entry: dict) -> float:
         """
         计算关键词相关度（支持法律术语精确匹配）
 
         精确匹配法律术语给更高权重
         """
-        search_text = entry.get('search_text', '')
+        search_text = entry.get("search_text", "")
         if not search_text:
             return 0.0
 
@@ -378,21 +340,18 @@ class VectorStore:
                 score += 0.2
 
         # 3. 法条关键词精确匹配
-        entry_keywords = entry.get('keywords', [])
+        entry_keywords = entry.get("keywords", [])
         for kw in entry_keywords:
             if kw.lower() in search_text:
                 # 检查是否是法律术语精确匹配
-                is_legal_term = any(
-                    kw in FORCE_RECALL_TERMS.get(t, [])
-                    for t in FORCE_RECALL_TERMS
-                )
+                is_legal_term = any(kw in FORCE_RECALL_TERMS.get(t, []) for t in FORCE_RECALL_TERMS)
                 if is_legal_term:
                     score += 0.4  # 法律术语精确匹配高权重
                 else:
                     score += 0.15
 
         # 4. 标题匹配加权
-        title = entry.get('title', '').lower()
+        title = entry.get("title", "").lower()
         if query_lower in title:
             score += 0.3
         for term in expanded_terms:
@@ -401,11 +360,7 @@ class VectorStore:
 
         return min(score, 2.0)  # 可以超过1，后续归一化
 
-    def _force_recall(
-        self,
-        query: str,
-        category_filter: Optional[str] = None
-    ) -> List[VectorSearchResult]:
+    def _force_recall(self, query: str, category_filter: str | None = None) -> list[VectorSearchResult]:
         """
         法律术语强制召回
 
@@ -437,26 +392,25 @@ class VectorStore:
                 continue
 
             entry = self._keyword_index[entry_id]
-            if category_filter and entry.get('category') != category_filter:
+            if category_filter and entry.get("category") != category_filter:
                 continue
 
             # 强制召回给基础分
-            results.append(VectorSearchResult(
-                id=entry_id,
-                content=entry['content'],
-                metadata=entry,
-                distance=0.3,  # 默认距离
-                score=0.7  # 基础分（不挤占精确匹配结果）
-            ))
+            results.append(
+                VectorSearchResult(
+                    id=entry_id,
+                    content=entry["content"],
+                    metadata=entry,
+                    distance=0.3,  # 默认距离
+                    score=0.7,  # 基础分（不挤占精确匹配结果）
+                )
+            )
 
         return results
 
     def _rrf_merge(
-        self,
-        all_results: Dict[str, Tuple[VectorSearchResult, float, float]],
-        top_k: int,
-        k: int = 60
-    ) -> List[VectorSearchResult]:
+        self, all_results: dict[str, tuple[VectorSearchResult, float, float]], top_k: int, k: int = 60
+    ) -> list[VectorSearchResult]:
         """
         RRF (Reciprocal Rank Fusion) 融合排序
 
@@ -468,24 +422,16 @@ class VectorStore:
             return []
 
         # 按向量得分排序
-        vector_ranked = sorted(
-            all_results.items(),
-            key=lambda x: x[1][1],
-            reverse=True
-        )
+        vector_ranked = sorted(all_results.items(), key=lambda x: x[1][1], reverse=True)
         vector_ranks = {id_: i + 1 for i, (id_, _) in enumerate(vector_ranked)}
 
         # 按关键词得分排序
-        keyword_ranked = sorted(
-            all_results.items(),
-            key=lambda x: x[1][2],
-            reverse=True
-        )
+        keyword_ranked = sorted(all_results.items(), key=lambda x: x[1][2], reverse=True)
         keyword_ranks = {id_: i + 1 for i, (id_, _) in enumerate(keyword_ranked)}
 
         # 计算 RRF 得分
         rrf_scores = {}
-        for entry_id, (result, v_score, k_score) in all_results.items():
+        for entry_id, (_result, _v_score, _k_score) in all_results.items():
             v_rank = vector_ranks.get(entry_id, len(all_results) + 1)
             k_rank = keyword_ranks.get(entry_id, len(all_results) + 1)
 
@@ -505,12 +451,8 @@ class VectorStore:
         return final_results
 
     def _keyword_search(
-        self,
-        query: str,
-        top_k: int,
-        category_filter: Optional[str] = None,
-        min_score: float = 0.3
-    ) -> List[VectorSearchResult]:
+        self, query: str, top_k: int, category_filter: str | None = None, min_score: float = 0.3
+    ) -> list[VectorSearchResult]:
         """简单关键词检索（向后兼容）"""
         return self._keyword_search_expanded(query, top_k, category_filter)
 
@@ -554,4 +496,4 @@ class VectorStore:
     def _generate_id(law: str, article: str) -> str:
         """生成法条唯一 ID"""
         raw = f"{law}_{article}"
-        return hashlib.md5(raw.encode('utf-8')).hexdigest()[:16]
+        return hashlib.md5(raw.encode("utf-8")).hexdigest()[:16]
