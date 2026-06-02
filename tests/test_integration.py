@@ -12,8 +12,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from unittest.mock import AsyncMock, Mock
 
-from src.exceptions import LLMTimeoutError
-from src.llm_client import LLMClient
+from src.core.exceptions import LLMTimeoutError
+from src.llm.llm_client import LLMClient
 
 
 def test_llm_degradation_in_review():
@@ -21,13 +21,13 @@ def test_llm_degradation_in_review():
     print("\n=== 测试: LLM 降级策略 ===")
 
     from src.agent_loop import AgentLoop
-    from src.chat_memory import ChatMemory
-    from src.legal_matcher import LegalMatcher
-    from src.parser import DocumentParser
-    from src.redliner import Redliner
-    from src.report import ReportGenerator
-    from src.risk_engine import RiskEngine
-    from src.security import SecurityPreprocessor
+    from src.infra.chat_memory import ChatMemory
+    from src.analysis.legal_matcher import LegalMatcher
+    from src.parsing.parser import DocumentParser
+    from src.output.redliner import Redliner
+    from src.output.report import ReportGenerator
+    from src.analysis.risk_engine import RiskEngine
+    from src.output.security import SecurityPreprocessor
 
     # 创建 mock 对象
     chat_memory = ChatMemory()
@@ -108,8 +108,8 @@ def test_file_parsing_errors():
     """测试文件解析错误处理"""
     print("\n=== 测试: 文件解析错误处理 ===")
 
-    from src.exceptions import FileCorruptedError, UnsupportedFormatError
-    from src.parser import DocumentParser
+    from src.core.exceptions import FileCorruptedError, UnsupportedFormatError
+    from src.parsing.parser import DocumentParser
 
     parser = DocumentParser()
 
@@ -132,7 +132,7 @@ def test_user_friendly_error_display():
     """测试用户友好错误显示"""
     print("\n=== 测试: 用户友好错误显示 ===")
 
-    from src.exceptions import get_user_friendly_message
+    from src.core.exceptions import get_user_friendly_message
 
     test_errors = [
         ("LLM_TIMEOUT", "LLM 超时场景"),

@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from src.logger import logger_manager
+from src.infra.logger import logger_manager
 
 
 class TaskStatus(Enum):

@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.session_store import ReviewResultStore
+from src.infra.session_store import ReviewResultStore
 
 
 @pytest.fixture
@@ -69,7 +69,7 @@ class TestLRUEviction:
 class TestExpiredCleanup:
     def test_cleanup_removes_expired(self, store):
         sid = store.create_session()
-        with patch("src.session_store.time") as mock_time:
+        with patch("src.infra.session_store.time") as mock_time:
             mock_time.time.return_value = time.time() + 4000
             store.create_session()  # 触发清理
         # sid 应被清理
@@ -83,7 +83,7 @@ class TestExpiredCleanup:
     def test_cleanup_expired_public_api(self, store):
         store._max_age_seconds = 0
         sid = store.create_session()
-        with patch("src.session_store.time") as mock_time:
+        with patch("src.infra.session_store.time") as mock_time:
             mock_time.time.return_value = time.time() + 1
             store.cleanup_expired()
         assert store.get(sid) == {}

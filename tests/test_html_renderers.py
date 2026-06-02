@@ -11,7 +11,7 @@ HTML 渲染器单元测试
 
 from unittest.mock import patch
 
-from src.html_renderers import (
+from src.output.html_renderers import (
     LEVEL_ORDER,
     _esc,
     _index_risks_by_clause,
@@ -105,13 +105,13 @@ class TestToolCallLog:
 
 class TestBuildTraceView:
     def test_no_session(self):
-        with patch("src.html_renderers.review_store") as mock_store:
+        with patch("src.output.html_renderers.review_store") as mock_store:
             mock_store.latest_session_id = None
             clauses_html, risks_html = build_trace_view()
             assert "请先进行文件审查" in clauses_html
 
     def test_empty_session(self):
-        with patch("src.html_renderers.review_store") as mock_store:
+        with patch("src.output.html_renderers.review_store") as mock_store:
             mock_store.latest_session_id = "s1"
             mock_store.get_clauses.return_value = []
             mock_store.get_risks.return_value = []
@@ -119,7 +119,7 @@ class TestBuildTraceView:
             assert "审查完成" in clauses_html
 
     def test_clauses_with_risks(self):
-        with patch("src.html_renderers.review_store") as mock_store:
+        with patch("src.output.html_renderers.review_store") as mock_store:
             mock_store.latest_session_id = "s1"
             mock_store.get_clauses.return_value = [
                 {"id": 1, "title": "第一条", "content": "甲方义务"},
@@ -137,7 +137,7 @@ class TestBuildTraceView:
             assert "共 2 个风险点" in risks_html
 
     def test_critical_risk_styling(self):
-        with patch("src.html_renderers.review_store") as mock_store:
+        with patch("src.output.html_renderers.review_store") as mock_store:
             mock_store.latest_session_id = "s1"
             mock_store.get_clauses.return_value = [
                 {"id": 1, "title": "关键条款", "content": "重要内容"},

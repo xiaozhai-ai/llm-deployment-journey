@@ -8,7 +8,7 @@
 """
 
 # 初始化日志（必须在其他模块导入之前）
-from src.logger import logger_manager
+from src.infra.logger import logger_manager
 
 logger_manager.initialize(log_dir="logs", enable_json_log=True)
 
@@ -18,18 +18,18 @@ import socket
 import threading
 
 from src.agent_loop import AgentLoop
-from src.chat_memory import ChatMemory
-from src.config import get_llm_config, get_paths_config, get_settings
-from src.legal_matcher import LegalMatcher
-from src.llm_client import LLMClient
-from src.parser import DocumentParser
-from src.playbook_manager import PlaybookManager
-from src.redliner import Redliner
-from src.report import ReportGenerator
-from src.risk_engine import RiskEngine
-from src.security import SecurityPreprocessor
+from src.infra.chat_memory import ChatMemory
+from src.core.config import get_llm_config, get_paths_config, get_settings
+from src.analysis.legal_matcher import LegalMatcher
+from src.llm.llm_client import LLMClient
+from src.parsing.parser import DocumentParser
+from src.analysis.playbook_manager import PlaybookManager
+from src.output.redliner import Redliner
+from src.output.report import ReportGenerator
+from src.analysis.risk_engine import RiskEngine
+from src.output.security import SecurityPreprocessor
 from src.ui.layout import create_ui
-from src.vector_store import VectorStore
+from src.llm.vector_store import VectorStore
 
 
 def create_app():
@@ -40,7 +40,7 @@ def create_app():
     """
     # 初始化反馈存储目录
     try:
-        from src.feedback_store import get_feedback_store
+        from src.infra.feedback_store import get_feedback_store
 
         get_feedback_store()
     except Exception as e:

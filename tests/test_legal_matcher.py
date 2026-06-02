@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.legal_matcher import LegalMatcher
+from src.analysis.legal_matcher import LegalMatcher
 
 
 @pytest.fixture
@@ -295,7 +295,7 @@ class TestHybridSearch:
 
     def test_vector_search_results_used(self, matcher, mock_vector_store):
         """向量检索结果应被使用"""
-        from src.vector_store import VectorSearchResult
+        from src.llm.vector_store import VectorSearchResult
 
         mock_vector_store.hybrid_search.return_value = [
             VectorSearchResult(

@@ -16,7 +16,7 @@ from datetime import date
 
 import pytest
 
-from src.knowledge_freshness import (
+from src.analysis.knowledge_freshness import (
     KnowledgeFreshnessChecker,
     LegalStatus,
 )

@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 import gradio as gr
 
 from src.agent_loop import AgentLoop, TaskProgress
-from src.exceptions import (
+from src.core.exceptions import (
     FileCorruptedError,
     LLMError,
     LLMNetworkError,
@@ -27,9 +27,9 @@ from src.exceptions import (
     classify_error,
     get_user_friendly_message,
 )
-from src.html_renderers import format_thinking_process, format_tool_call_log
-from src.logger import logger_manager
-from src.session_store import review_store
+from src.output.html_renderers import format_thinking_process, format_tool_call_log
+from src.infra.logger import logger_manager
+from src.infra.session_store import review_store
 
 _executor = ThreadPoolExecutor(max_workers=4)
 
@@ -434,7 +434,7 @@ def submit_feedback(risk_idx, action, comment, corrected_level) -> str:
     session_data = review_store.get(session_id)
 
     try:
-        from src.feedback_store import get_feedback_store
+        from src.infra.feedback_store import get_feedback_store
 
         store = get_feedback_store()
         store.record_correction(
@@ -460,7 +460,7 @@ def submit_feedback(risk_idx, action, comment, corrected_level) -> str:
 def show_feedback_stats() -> str:
     """显示反馈统计"""
     try:
-        from src.feedback_store import get_feedback_store
+        from src.infra.feedback_store import get_feedback_store
 
         store = get_feedback_store()
         stats = store.get_stats()

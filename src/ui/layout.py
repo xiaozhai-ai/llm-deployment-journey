@@ -15,7 +15,7 @@ from src.handlers import (
     show_feedback_stats,
     submit_feedback,
 )
-from src.html_renderers import build_trace_view
+from src.output.html_renderers import build_trace_view
 
 CUSTOM_CSS = """
 .disclaimer-box {
@@ -274,7 +274,7 @@ def _build_freshness_tab():
         freshness_btn = gr.Button("🔄 检查知识库状态", variant="primary")
 
         def check_freshness() -> str:
-            from src.knowledge_freshness import get_freshness_checker
+            from src.analysis.knowledge_freshness import get_freshness_checker
 
             checker = get_freshness_checker()
             report = checker.check_all()

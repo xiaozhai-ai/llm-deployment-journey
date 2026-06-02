@@ -15,8 +15,8 @@ import tempfile
 
 import pytest
 
-from src.exceptions import FileCorruptedError, UnsupportedFormatError
-from src.parser import Clause, DocumentParser
+from src.core.exceptions import FileCorruptedError, UnsupportedFormatError
+from src.parsing.parser import Clause, DocumentParser
 
 
 @pytest.fixture

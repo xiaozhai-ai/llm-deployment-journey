@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from src.feedback_store import CorrectionAction, FeedbackStore
+from src.infra.feedback_store import CorrectionAction, FeedbackStore
 
 
 @pytest.fixture

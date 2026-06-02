@@ -18,8 +18,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.exceptions import RuleLoadError
-from src.risk_engine import RiskAnalysisResult, RiskEngine, RiskItem
+from src.core.exceptions import RuleLoadError
+from src.analysis.risk_engine import RiskAnalysisResult, RiskEngine, RiskItem
 
 
 @pytest.fixture
@@ -551,7 +551,7 @@ class TestRiskClauseLinking:
 
     def test_link_by_title(self, engine):
         """通过标题匹配关联风险和条款"""
-        from src.parser import Clause
+        from src.parsing.parser import Clause
 
         risks = [
             RiskItem(
@@ -576,7 +576,7 @@ class TestRiskClauseLinking:
 
     def test_link_by_content(self, engine):
         """通过内容匹配关联风险和条款（preview 需 > 20 字符）"""
-        from src.parser import Clause
+        from src.parsing.parser import Clause
 
         preview = "如乙方违约应支付违约金十万元，赔偿甲方因此遭受的全部经济损失和合理费用"
         risks = [
@@ -602,7 +602,7 @@ class TestRiskClauseLinking:
 
     def test_link_no_match(self, engine):
         """无匹配时 clause_id 保持为 0"""
-        from src.parser import Clause
+        from src.parsing.parser import Clause
 
         risks = [
             RiskItem(

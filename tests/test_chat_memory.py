@@ -14,7 +14,7 @@ import time
 
 import pytest
 
-from src.chat_memory import ChatMemory, DialogState, FollowUpQuestion, FollowUpType
+from src.infra.chat_memory import ChatMemory, DialogState, FollowUpQuestion, FollowUpType
 
 
 @pytest.fixture

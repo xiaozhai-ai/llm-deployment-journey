@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.redliner import ClauseRevision, Redliner
+from src.output.redliner import ClauseRevision, Redliner
 
 # ============================================
 # 测试用数据

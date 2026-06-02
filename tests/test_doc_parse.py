@@ -7,7 +7,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from src.parser import DocumentParser
+from src.parsing.parser import DocumentParser
 
 
 def test_doc_parsing():
@@ -63,7 +63,7 @@ if __name__ == "__main__":
         doc_file = sys.argv[1]
         if os.path.exists(doc_file):
             print(f"📄 测试指定文件: {doc_file}")
-            from src.parser import DocumentParser
+            from src.parsing.parser import DocumentParser
 
             parser = DocumentParser()
             try:

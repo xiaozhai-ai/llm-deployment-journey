@@ -7,7 +7,7 @@ class TestSignatureDetection:
     """签章识别测试"""
 
     def test_detect_party_signatures(self):
-        from src.legal_entities.signature import detect_signatures
+        from src.parsing.legal_entities.signature import detect_signatures
 
         text = """
         第十条 签章
@@ -25,7 +25,7 @@ class TestSignatureDetection:
         assert "乙方" in roles
 
     def test_has_seal_detection(self):
-        from src.legal_entities.signature import detect_signatures
+        from src.parsing.legal_entities.signature import detect_signatures
 
         text = "甲方（盖章）：北京科技有限公司"
         sigs = detect_signatures(text)
@@ -33,7 +33,7 @@ class TestSignatureDetection:
         assert sigs[0].has_seal is True
 
     def test_has_signature_detection(self):
-        from src.legal_entities.signature import detect_signatures
+        from src.parsing.legal_entities.signature import detect_signatures
 
         text = "甲方（签字）：张三"
         sigs = detect_signatures(text)
@@ -41,7 +41,7 @@ class TestSignatureDetection:
         assert sigs[0].has_signature is True
 
     def test_no_signatures(self):
-        from src.legal_entities.signature import detect_signatures
+        from src.parsing.legal_entities.signature import detect_signatures
 
         text = "这是一份普通文本，没有任何特殊标记。"
         sigs = detect_signatures(text)
@@ -52,28 +52,28 @@ class TestRevisionExtraction:
     """修订追踪测试"""
 
     def test_inline_delete(self):
-        from src.legal_entities.revision import extract_revisions
+        from src.parsing.legal_entities.revision import extract_revisions
 
         text = "合同金额为~~500万元~~修改为600万元。"
         revs = extract_revisions(text)
         assert any(r.revision_type == "delete" and "500万元" in r.text for r in revs)
 
     def test_inline_insert(self):
-        from src.legal_entities.revision import extract_revisions
+        from src.parsing.legal_entities.revision import extract_revisions
 
         text = "合同金额为[新增：600万元]。"
         revs = extract_revisions(text)
         assert any(r.revision_type == "insert" and "600万元" in r.text for r in revs)
 
     def test_inline_modify(self):
-        from src.legal_entities.revision import extract_revisions
+        from src.parsing.legal_entities.revision import extract_revisions
 
         text = "交货日期[修改：2024年6月30日]。"
         revs = extract_revisions(text)
         assert any(r.revision_type == "insert" for r in revs)
 
     def test_no_revisions(self):
-        from src.legal_entities.revision import extract_revisions
+        from src.parsing.legal_entities.revision import extract_revisions
 
         text = "这是一份没有修订标记的合同。"
         revs = extract_revisions(text)
@@ -84,7 +84,7 @@ class TestDefinitionExtraction:
     """定义引用测试"""
 
     def test_extract_short_name(self):
-        from src.legal_entities.definition import extract_definitions
+        from src.parsing.legal_entities.definition import extract_definitions
 
         text = '北京科技有限公司（以下简称"甲方"）与上海贸易有限公司（以下简称"乙方"）签订本合同。'
         defs = extract_definitions(text)
@@ -93,7 +93,7 @@ class TestDefinitionExtraction:
         assert "乙方" in terms
 
     def test_extract_definition_text(self):
-        from src.legal_entities.definition import extract_definitions
+        from src.parsing.legal_entities.definition import extract_definitions
 
         text = '北京科技有限公司（以下简称"甲方"）'
         defs = extract_definitions(text)
@@ -101,28 +101,28 @@ class TestDefinitionExtraction:
         assert "北京科技有限公司" in defs[0].definition_text
 
     def test_single_quotes(self):
-        from src.legal_entities.definition import extract_definitions
+        from src.parsing.legal_entities.definition import extract_definitions
 
         text = "北京科技有限公司（以下简称'甲方'）签订本合同。"
         defs = extract_definitions(text)
         assert any(d.term == "甲方" for d in defs)
 
     def test_chinese_quotes(self):
-        from src.legal_entities.definition import extract_definitions
+        from src.parsing.legal_entities.definition import extract_definitions
 
         text = "北京科技有限公司（以下简称\u2018甲方\u2019）签订本合同。"
         defs = extract_definitions(text)
         assert any(d.term == "甲方" for d in defs)
 
     def test_no_definitions(self):
-        from src.legal_entities.definition import extract_definitions
+        from src.parsing.legal_entities.definition import extract_definitions
 
         text = "这是一份没有定义条款的合同。"
         defs = extract_definitions(text)
         assert len(defs) == 0
 
     def test_definition_with_ref_linking(self):
-        from src.legal_entities.definition import extract_definitions
+        from src.parsing.legal_entities.definition import extract_definitions
 
         text = """
         北京科技有限公司（以下简称"甲方"）与上海贸易有限公司（以下简称"乙方"）签订本合同。

@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 def test_config_loading():
     """测试配置加载"""
-    from src.config import get_llm_config, get_paths_config, get_settings
+    from src.core.config import get_llm_config, get_paths_config, get_settings
 
     settings = get_settings()
     assert settings.llm_api_base, "LLM API Base 不应为空"
@@ -32,7 +32,7 @@ def test_config_loading():
 
 def test_validation():
     """测试配置验证"""
-    from src.config import Settings
+    from src.core.config import Settings
 
     try:
         Settings(llm_api_key="", llm_api_base="https://example.com/v1")

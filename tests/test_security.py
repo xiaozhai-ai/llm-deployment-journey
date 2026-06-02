@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.security import SecurityPreprocessor
+from src.output.security import SecurityPreprocessor
 
 
 @pytest.fixture

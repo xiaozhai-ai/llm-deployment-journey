@@ -12,7 +12,7 @@ PlaybookManager 单元测试
 
 import pytest
 
-from src.playbook_manager import PlaybookManager, StrictnessLevel
+from src.analysis.playbook_manager import PlaybookManager, StrictnessLevel
 
 
 @pytest.fixture

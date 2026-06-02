@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.report import ReportGenerator
+from src.output.report import ReportGenerator
 
 # ============================================
 # 测试用数据结构
@@ -93,7 +93,7 @@ def multi_level_risk_result():
 
 
 class TestGenerateReport:
-    @patch("src.report.get_freshness_checker")
+    @patch("src.output.report.get_freshness_checker")
     def test_report_contains_header(self, mock_freshness, generator, single_risk_result):
         mock_checker = MagicMock()
         mock_checker.check_all.return_value = MagicMock(overall_status="healthy", warnings=[])
@@ -105,7 +105,7 @@ class TestGenerateReport:
         assert "测试合同.docx" in report
         assert "合同" in report
 
-    @patch("src.report.get_freshness_checker")
+    @patch("src.output.report.get_freshness_checker")
     def test_report_contains_risk_summary(self, mock_freshness, generator, single_risk_result):
         mock_checker = MagicMock()
         mock_checker.check_all.return_value = MagicMock(overall_status="healthy", warnings=[])
@@ -116,7 +116,7 @@ class TestGenerateReport:
         assert "📊 风险概览" in report
         assert "🔴 高风险" in report
 
-    @patch("src.report.get_freshness_checker")
+    @patch("src.output.report.get_freshness_checker")
     def test_report_contains_disclaimer(self, mock_freshness, generator, single_risk_result):
         mock_checker = MagicMock()
         mock_checker.check_all.return_value = MagicMock(overall_status="healthy", warnings=[])
@@ -127,7 +127,7 @@ class TestGenerateReport:
         assert "免责声明" in report
         assert "不构成正式法律意见" in report
 
-    @patch("src.report.get_freshness_checker")
+    @patch("src.output.report.get_freshness_checker")
     def test_report_no_risks(self, mock_freshness, generator):
         mock_checker = MagicMock()
         mock_checker.check_all.return_value = MagicMock(overall_status="healthy", warnings=[])
@@ -138,7 +138,7 @@ class TestGenerateReport:
         report = generator.generate_report("test.docx", "contract", empty_result, [])
         assert "未检测到明显风险" in report
 
-    @patch("src.report.get_freshness_checker")
+    @patch("src.output.report.get_freshness_checker")
     def test_report_with_security_warning(self, mock_freshness, generator, single_risk_result):
         mock_checker = MagicMock()
         mock_checker.check_all.return_value = MagicMock(overall_status="healthy", warnings=[])
@@ -158,7 +158,7 @@ class TestGenerateReport:
 
 
 class TestRiskLevelSorting:
-    @patch("src.report.get_freshness_checker")
+    @patch("src.output.report.get_freshness_checker")
     def test_critical_risks_first(self, mock_freshness, generator, multi_level_risk_result):
         mock_checker = MagicMock()
         mock_checker.check_all.return_value = MagicMock(overall_status="healthy", warnings=[])
@@ -173,7 +173,7 @@ class TestRiskLevelSorting:
         low_pos = report.index("低风险")
         assert critical_pos < high_pos < medium_pos < low_pos
 
-    @patch("src.report.get_freshness_checker")
+    @patch("src.output.report.get_freshness_checker")
     def test_critical_icon_in_report(self, mock_freshness, generator):
         mock_checker = MagicMock()
         mock_checker.check_all.return_value = MagicMock(overall_status="healthy", warnings=[])
@@ -193,7 +193,7 @@ class TestRiskLevelSorting:
 
 
 class TestSuggestions:
-    @patch("src.report.get_freshness_checker")
+    @patch("src.output.report.get_freshness_checker")
     def test_suggestions_on_separate_lines(self, mock_freshness, generator):
         mock_checker = MagicMock()
         mock_checker.check_all.return_value = MagicMock(overall_status="healthy", warnings=[])
@@ -211,7 +211,7 @@ class TestSuggestions:
         assert "- [HIGH] 风险A: 建议A\n" in report
         assert "- [MEDIUM] 风险B: 建议B" in report
 
-    @patch("src.report.get_freshness_checker")
+    @patch("src.output.report.get_freshness_checker")
     def test_no_suggestions(self, mock_freshness, generator):
         mock_checker = MagicMock()
         mock_checker.check_all.return_value = MagicMock(overall_status="healthy", warnings=[])
@@ -230,7 +230,7 @@ class TestSuggestions:
 
 
 class TestClausePreview:
-    @patch("src.report.get_freshness_checker")
+    @patch("src.output.report.get_freshness_checker")
     def test_short_preview_no_ellipsis(self, mock_freshness, generator):
         mock_checker = MagicMock()
         mock_checker.check_all.return_value = MagicMock(overall_status="healthy", warnings=[])
@@ -243,7 +243,7 @@ class TestClausePreview:
         assert "「短文本」" in report
         assert "短文本…" not in report
 
-    @patch("src.report.get_freshness_checker")
+    @patch("src.output.report.get_freshness_checker")
     def test_long_preview_has_ellipsis(self, mock_freshness, generator):
         mock_checker = MagicMock()
         mock_checker.check_all.return_value = MagicMock(overall_status="healthy", warnings=[])
@@ -263,7 +263,7 @@ class TestClausePreview:
 
 
 class TestGenerateReportDict:
-    @patch("src.report.get_freshness_checker")
+    @patch("src.output.report.get_freshness_checker")
     def test_dict_contains_critical_level(self, mock_freshness, generator):
         mock_checker = MagicMock()
         mock_checker.get_freshness_disclaimer.return_value = "时效性声明"
@@ -276,7 +276,7 @@ class TestGenerateReportDict:
         assert d["risks"][0]["risk_level"] == "critical"
         assert d["risks"][0]["risk_level_cn"] == "严重"
 
-    @patch("src.report.get_freshness_checker")
+    @patch("src.output.report.get_freshness_checker")
     def test_dict_risk_summary(self, mock_freshness, generator):
         mock_checker = MagicMock()
         mock_checker.get_freshness_disclaimer.return_value = ""
@@ -300,13 +300,13 @@ class TestGenerateReportDict:
 
 
 class TestFreshnessExceptionIsolation:
-    @patch("src.report.get_freshness_checker")
+    @patch("src.output.report.get_freshness_checker")
     def test_freshness_section_exception_returns_empty(self, mock_freshness, generator):
         mock_freshness.side_effect = Exception("YAML 解析失败")
         section = generator.generate_freshness_section()
         assert section == ""
 
-    @patch("src.report.get_freshness_checker")
+    @patch("src.output.report.get_freshness_checker")
     def test_report_generation_survives_freshness_failure(self, mock_freshness, generator, single_risk_result):
         # 第一次调用（generate_freshness_section）抛异常，第二次（_generate_disclaimer）正常
         mock_checker = MagicMock()

@@ -18,7 +18,7 @@ import pytest
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from src.exceptions import (
+from src.core.exceptions import (
     FileCorruptedError,
     LLMAPIKeyError,
     LLMNetworkError,
@@ -29,9 +29,9 @@ from src.exceptions import (
     classify_error,
     get_user_friendly_message,
 )
-from src.llm_client import LLMClient
-from src.parser import DocumentParser
-from src.vector_store import VectorStore
+from src.llm.llm_client import LLMClient
+from src.parsing.parser import DocumentParser
+from src.llm.vector_store import VectorStore
 
 
 def test_exception_classification():
@@ -138,7 +138,7 @@ def test_vector_store_degradation():
     print("\n=== 测试 7: ChromaDB 降级策略 ===")
 
     # 模拟 ChromaDB 不可用
-    with patch("src.vector_store.CHROMA_AVAILABLE", False):
+    with patch("src.llm.vector_store.CHROMA_AVAILABLE", False):
         vector_store = VectorStore()
 
         try:

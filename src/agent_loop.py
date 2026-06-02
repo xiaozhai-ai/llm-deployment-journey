@@ -12,8 +12,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 
-from src.chat_memory import ChatMemory
-from src.logger import logger_manager
+from src.infra.chat_memory import ChatMemory
+from src.infra.logger import logger_manager
 
 
 class TaskStage(Enum):
@@ -326,7 +326,7 @@ class AgentLoop:
                 risk_result.low_count = sum(1 for r in risk_result.risks if r.risk_level == "low")
             except Exception as e:
                 # 降级策略：记录警告，继续使用规则分析结果
-                from src.exceptions import classify_error, get_user_friendly_message
+                from src.core.exceptions import classify_error, get_user_friendly_message
 
                 error_code = classify_error(e)
                 user_msg = get_user_friendly_message(error_code)
@@ -391,7 +391,7 @@ class AgentLoop:
                     docx_bytes = self.redliner.generate_docx_with_revisions(text, revision_doc.revisions, filename)
             except Exception as e:
                 # 降级策略：记录警告，但不阻断流程
-                from src.exceptions import classify_error, get_user_friendly_message
+                from src.core.exceptions import classify_error, get_user_friendly_message
 
                 error_code = classify_error(e)
                 user_msg = get_user_friendly_message(error_code)
