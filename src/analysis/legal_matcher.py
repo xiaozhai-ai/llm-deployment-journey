@@ -129,8 +129,11 @@ class LegalMatcher:
         )
 
     def _keyword_fallback(self, text: str, category: str, exclude_ids: set) -> list[LegalMatch]:
-        """关键词回退检索"""
+        """关键词回退检索（支持法律术语扩展查询）"""
+        from src.analysis.legal_terms import expand_query
+
         matches = []
+        expanded_terms = expand_query(text)
         text_lower = text.lower()
 
         for provision in self.provisions:
@@ -138,7 +141,17 @@ class LegalMatcher:
             if provision.article in exclude_ids:
                 continue
 
+            # 原始文本匹配
             score = self._calculate_keyword_relevance(text_lower, provision, category)
+
+            # 扩展术语补充匹配（取最高分）
+            if score < 0.3:
+                for term in expanded_terms:
+                    if term == text:
+                        continue
+                    term_score = self._calculate_keyword_relevance(term.lower(), provision, category)
+                    score = max(score, term_score)
+
             if score > 0.3:
                 matches.append(
                     LegalMatch(

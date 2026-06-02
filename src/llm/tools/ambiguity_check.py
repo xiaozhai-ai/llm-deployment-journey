@@ -4,10 +4,9 @@
 - 由 LLM 执行语义分析
 """
 
-import json
-import re
 from typing import Any
 
+from src.infra.utils import extract_json_object
 from src.llm.tools.base import BaseTool, ToolDefinition, ToolResult
 
 
@@ -124,27 +123,15 @@ class AmbiguityCheckTool(BaseTool):
 
     @staticmethod
     def _parse_json_response(response: str) -> dict | None:
-        """解析 LLM 返回的 JSON（健壮版本）"""
-        # 尝试直接解析
-        try:
-            return json.loads(response.strip())
-        except json.JSONDecodeError:
-            pass
+        """解析 LLM 返回的 JSON（括号计数法，正确处理嵌套）"""
+        import json
 
-        # 尝试提取 JSON 块（可能被 markdown 包裹）
-        json_patterns = [
-            r"```(?:json)?\s*(\{[\s\S]*?\})\s*```",  # markdown 代码块
-            r"(\{[\s\S]*\})",  # 最外层花括号
-        ]
-
-        for pattern in json_patterns:
-            match = re.search(pattern, response)
-            if match:
-                try:
-                    return json.loads(match.group(1))
-                except json.JSONDecodeError:
-                    continue
-
+        raw = extract_json_object(response)
+        if raw:
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError:
+                return None
         return None
 
     @staticmethod

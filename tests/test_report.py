@@ -207,9 +207,9 @@ class TestSuggestions:
         result = MockRiskResult(risks=risks, high_count=1, medium_count=1)
         report = generator.generate_report("test.docx", "contract", result, [])
 
-        # 每条建议应独占一行
-        assert "- [HIGH] 风险A: 建议A\n" in report
-        assert "- [MEDIUM] 风险B: 建议B" in report
+        # 每条建议应独占一行（风险等级使用中文）
+        assert "- [高] 风险A: 建议A\n" in report
+        assert "- [中] 风险B: 建议B" in report
 
     @patch("src.output.report.get_freshness_checker")
     def test_no_suggestions(self, mock_freshness, generator):
@@ -318,3 +318,149 @@ class TestFreshnessExceptionIsolation:
         # 报告应正常生成，只是缺少新鲜度段落
         assert "📋 法务审查报告" in report
         assert "免责声明" in report
+
+
+# ============================================
+# 边界条件测试
+# ============================================
+
+
+class TestEdgeCases:
+    @patch("src.output.report.get_freshness_checker")
+    def test_report_with_all_risk_levels(self, mock_freshness, generator):
+        """包含所有风险等级的报告"""
+        mock_checker = MagicMock()
+        mock_checker.check_all.return_value = MagicMock(overall_status="healthy", warnings=[])
+        mock_checker.get_freshness_disclaimer.return_value = ""
+        mock_freshness.return_value = mock_checker
+
+        risks = [
+            MockRiskItem(id=f"R{i}", name=f"风险{i}", risk_level=level, confidence=0.5)
+            for i, level in enumerate(["critical", "high", "medium", "low"])
+        ]
+        result = MockRiskResult(risks=risks, critical_count=1, high_count=1, medium_count=1, low_count=1)
+        report = generator.generate_report("test.docx", "contract", result, [])
+
+        assert "🟣 严重风险" in report
+        assert "🔴 高风险" in report
+        assert "🟡 中风险" in report
+        assert "🟢 低风险" in report
+
+    @patch("src.output.report.get_freshness_checker")
+    def test_report_with_special_characters_in_filename(self, mock_freshness, generator, single_risk_result):
+        """文件名包含特殊字符"""
+        mock_checker = MagicMock()
+        mock_checker.check_all.return_value = MagicMock(overall_status="healthy", warnings=[])
+        mock_checker.get_freshness_disclaimer.return_value = ""
+        mock_freshness.return_value = mock_checker
+
+        report = generator.generate_report("合同<2024>.docx", "contract", single_risk_result, [])
+        assert "合同<2024>.docx" in report or "合同" in report
+
+    @patch("src.output.report.get_freshness_checker")
+    def test_report_with_empty_description(self, mock_freshness, generator):
+        """风险描述为空"""
+        mock_checker = MagicMock()
+        mock_checker.check_all.return_value = MagicMock(overall_status="healthy", warnings=[])
+        mock_checker.get_freshness_disclaimer.return_value = ""
+        mock_freshness.return_value = mock_checker
+
+        risk = MockRiskItem(id="R1", name="风险A", risk_level="high", description="")
+        result = MockRiskResult(risks=[risk], high_count=1)
+        report = generator.generate_report("test.docx", "contract", result, [])
+        assert "📋 法务审查报告" in report
+
+    @patch("src.output.report.get_freshness_checker")
+    def test_report_with_none_values(self, mock_freshness, generator):
+        """可选字段为 None"""
+        mock_checker = MagicMock()
+        mock_checker.check_all.return_value = MagicMock(overall_status="healthy", warnings=[])
+        mock_checker.get_freshness_disclaimer.return_value = ""
+        mock_freshness.return_value = mock_checker
+
+        risk = MockRiskItem(
+            id="R1",
+            name="风险A",
+            risk_level="high",
+            clause_position=None,
+            clause_content_preview=None,
+            legal_basis=None,
+            suggestion=None,
+        )
+        result = MockRiskResult(risks=[risk], high_count=1)
+        report = generator.generate_report("test.docx", "contract", result, [])
+        assert "📋 法务审查报告" in report
+        assert "暂无额外建议" in report
+
+    @patch("src.output.report.get_freshness_checker")
+    def test_report_with_very_long_suggestion(self, mock_freshness, generator):
+        """超长建议文本"""
+        mock_checker = MagicMock()
+        mock_checker.check_all.return_value = MagicMock(overall_status="healthy", warnings=[])
+        mock_checker.get_freshness_disclaimer.return_value = ""
+        mock_freshness.return_value = mock_checker
+
+        long_suggestion = "这是一条非常长的建议" * 100
+        risk = MockRiskItem(id="R1", name="风险A", risk_level="high", suggestion=long_suggestion)
+        result = MockRiskResult(risks=[risk], high_count=1)
+        report = generator.generate_report("test.docx", "contract", result, [])
+        assert long_suggestion in report
+
+    @patch("src.output.report.get_freshness_checker")
+    def test_report_with_confidence_zero(self, mock_freshness, generator):
+        """置信度为 0"""
+        mock_checker = MagicMock()
+        mock_checker.check_all.return_value = MagicMock(overall_status="healthy", warnings=[])
+        mock_checker.get_freshness_disclaimer.return_value = ""
+        mock_freshness.return_value = mock_checker
+
+        risk = MockRiskItem(id="R1", name="风险A", risk_level="high", confidence=0.0)
+        result = MockRiskResult(risks=[risk], high_count=1)
+        report = generator.generate_report("test.docx", "contract", result, [])
+        assert "📋 法务审查报告" in report
+
+    @patch("src.output.report.get_freshness_checker")
+    def test_report_with_confidence_one(self, mock_freshness, generator):
+        """置信度为 1"""
+        mock_checker = MagicMock()
+        mock_checker.check_all.return_value = MagicMock(overall_status="healthy", warnings=[])
+        mock_checker.get_freshness_disclaimer.return_value = ""
+        mock_freshness.return_value = mock_checker
+
+        risk = MockRiskItem(id="R1", name="风险A", risk_level="high", confidence=1.0)
+        result = MockRiskResult(risks=[risk], high_count=1)
+        report = generator.generate_report("test.docx", "contract", result, [])
+        assert "📋 法务审查报告" in report
+
+    @patch("src.output.report.get_freshness_checker")
+    def test_report_with_many_risks(self, mock_freshness, generator):
+        """大量风险"""
+        mock_checker = MagicMock()
+        mock_checker.check_all.return_value = MagicMock(overall_status="healthy", warnings=[])
+        mock_checker.get_freshness_disclaimer.return_value = ""
+        mock_freshness.return_value = mock_checker
+
+        risks = [MockRiskItem(id=f"R{i}", name=f"风险{i}", risk_level="high", confidence=0.5) for i in range(50)]
+        result = MockRiskResult(risks=risks, high_count=50)
+        report = generator.generate_report("test.docx", "contract", result, [])
+        assert "📋 法务审查报告" in report
+        assert "共 50 个风险点" in report or "50" in report
+
+    @patch("src.output.report.get_freshness_checker")
+    def test_report_with_legal_basis_and_provisions(self, mock_freshness, generator):
+        """包含法律依据和引用条款"""
+        mock_checker = MagicMock()
+        mock_checker.check_all.return_value = MagicMock(overall_status="healthy", warnings=[])
+        mock_checker.get_freshness_disclaimer.return_value = ""
+        mock_freshness.return_value = mock_checker
+
+        risk = MockRiskItem(
+            id="R1",
+            name="违约责任缺失",
+            risk_level="high",
+            legal_basis="民法典第五百七十七条",
+            cited_provisions=["民法典第五百七十七条", "合同法第一百零七条"],
+        )
+        result = MockRiskResult(risks=[risk], high_count=1)
+        report = generator.generate_report("test.docx", "contract", result, [])
+        assert "民法典第五百七十七条" in report

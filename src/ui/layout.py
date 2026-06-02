@@ -16,6 +16,7 @@ from src.handlers import (
     submit_feedback,
 )
 from src.output.html_renderers import build_trace_view
+from src.analysis.knowledge_freshness import get_freshness_checker
 
 CUSTOM_CSS = """
 .disclaimer-box {
@@ -30,7 +31,7 @@ CUSTOM_CSS = """
 """
 
 HEADER = """
-# ⚖️ 法务审查 Agent v2.0
+# ⚖️ 法务审查 Agent v2.5
 
 > 增强版：多策略审查 · 多轮对话 · 修订追踪 · 异步处理
 """
@@ -62,7 +63,7 @@ def create_ui(
     chat_handler = make_chat_handler(llm_client_factory)
     search_handler = make_search_handler(legal_matcher)
 
-    with gr.Blocks(title="法务审查 Agent v2.0", css=CUSTOM_CSS, theme=gr.themes.Soft()) as demo:
+    with gr.Blocks(title="法务审查 Agent v2.5", css=CUSTOM_CSS, theme=gr.themes.Soft()) as demo:
         gr.Markdown(HEADER)
         gr.Markdown(DISCLAIMER)
 
@@ -146,7 +147,6 @@ def _build_review_tab(review_handler):
                 thinking_output = gr.HTML(
                     value='<div class="thinking-panel">⏳ 等待上传文件...</div>', label="🧠 AI 实时思考过程"
                 )
-                _progress_bar = gr.Markdown("⏳ 准备就绪")
                 warning_output = gr.Textbox(label="⚠️ 警告信息", lines=3, interactive=False, visible=True)
                 report_output = gr.Markdown(label="📊 审查报告")
                 tool_call_log_output = gr.HTML(label="🔧 AI 工具调用记录")
@@ -219,13 +219,21 @@ def _build_feedback_tab():
         feedback_stats_btn = gr.Button("📊 查看反馈统计")
         feedback_stats_output = gr.Markdown(label="统计信息")
 
+        def _submit_feedback_with_loading(risk_idx, action, comment, corrected_level):
+            yield "⏳ 提交中..."
+            yield submit_feedback(risk_idx, action, comment, corrected_level)
+
+        def _show_stats_with_loading():
+            yield "⏳ 加载中..."
+            yield show_feedback_stats()
+
         feedback_submit_btn.click(
-            fn=submit_feedback,
+            fn=_submit_feedback_with_loading,
             inputs=[feedback_risk_dropdown, feedback_action, feedback_comment, feedback_corrected_level],
             outputs=[feedback_output],
         )
 
-        feedback_stats_btn.click(fn=show_feedback_stats, outputs=[feedback_stats_output])
+        feedback_stats_btn.click(fn=_show_stats_with_loading, outputs=[feedback_stats_output])
 
     return feedback_risk_dropdown
 
@@ -262,7 +270,11 @@ def _build_search_tab(search_handler):
         search_btn = gr.Button("🔍 搜索", variant="primary")
         search_results = gr.Markdown(label="搜索结果")
 
-        search_btn.click(fn=search_handler, inputs=[search_input], outputs=[search_results])
+        def _search_with_loading(keyword):
+            yield "⏳ 搜索中..."
+            yield search_handler(keyword)
+
+        search_btn.click(fn=_search_with_loading, inputs=[search_input], outputs=[search_results])
 
 
 def _build_freshness_tab():
@@ -273,11 +285,10 @@ def _build_freshness_tab():
         freshness_output = gr.Markdown(label="新鲜度报告")
         freshness_btn = gr.Button("🔄 检查知识库状态", variant="primary")
 
-        def check_freshness() -> str:
-            from src.analysis.knowledge_freshness import get_freshness_checker
-
+        def check_freshness():
+            yield "⏳ 正在检查知识库状态..."
             checker = get_freshness_checker()
             report = checker.check_all()
-            return checker.format_report_for_display(report)
+            yield checker.format_report_for_display(report)
 
         freshness_btn.click(fn=check_freshness, outputs=[freshness_output])

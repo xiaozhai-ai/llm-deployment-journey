@@ -5,7 +5,7 @@ Redliner 单元测试
 - HTML 差异对比生成
 - XSS 防护（clause_title / risk_name 转义）
 - DOCX 生成（含声明文本）
-- JSON 解析容错
+- JSON 解析容错（测试真实 _extract_json 方法）
 - 空修订处理
 """
 
@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.output.redliner import ClauseRevision, Redliner
+from src.output.redliner import ClauseRevision
 
 # ============================================
 # 测试用数据
@@ -36,11 +36,6 @@ def _make_revision(**kwargs):
     )
     defaults.update(kwargs)
     return ClauseRevision(**defaults)
-
-
-@pytest.fixture
-def redliner():
-    return Redliner(llm_client=None)
 
 
 # ============================================
@@ -151,42 +146,68 @@ class TestDocxGeneration:
 
 
 # ============================================
-# JSON 解析容错
+# JSON 解析容错（测试真实 _extract_json 方法）
 # ============================================
 
 
 class TestJsonParsing:
     def test_valid_json_response(self, redliner):
         """LLM 返回标准 JSON 时应正常解析"""
-        # 通过 _llm_generate_revision 的内部逻辑验证
-        # 这里测试 JSON 提取逻辑本身
         response = '{"revised_text": "修订后文本", "explanation": "理由"}'
-        import re
-
-        json_match = re.search(r'\{[^{}]*"revised_text"[^{}]*\}', response)
-        assert json_match is not None
-        data = json.loads(json_match.group())
+        result = redliner._extract_json(response)
+        assert result is not None
+        data = json.loads(result)
         assert data["revised_text"] == "修订后文本"
 
     def test_json_with_surrounding_text(self, redliner):
         """LLM 在 JSON 前后附加说明文字时应正确提取"""
         response = '好的，以下是修订结果：\n{"revised_text": "新条款", "explanation": "理由"}\n以上是修订。'
-        import re
-
-        json_match = re.search(r'\{[^{}]*"revised_text"[^{}]*\}', response)
-        assert json_match is not None
-        data = json.loads(json_match.group())
+        result = redliner._extract_json(response)
+        assert result is not None
+        data = json.loads(result)
         assert data["revised_text"] == "新条款"
 
-    def test_malformed_json_handled(self, redliner):
-        """畸形 JSON 不应导致崩溃"""
-        import re
+    def test_json_in_markdown_fence(self, redliner):
+        """Markdown 代码块中的 JSON 应正确提取"""
+        response = '```json\n{"revised_text": "条款内容", "explanation": "理由"}\n```'
+        result = redliner._extract_json(response)
+        assert result is not None
+        data = json.loads(result)
+        assert data["revised_text"] == "条款内容"
 
-        response = '{"revised_text": "未闭合'
-        json_match = re.search(r'\{[^{}]*"revised_text"[^{}]*\}', response)
-        if json_match:
-            with pytest.raises(json.JSONDecodeError):
-                json.loads(json_match.group())
+    def test_json_in_plain_code_fence(self, redliner):
+        """普通代码块中的 JSON 应正确提取"""
+        response = '```\n{"revised_text": "条款内容"}\n```'
+        result = redliner._extract_json(response)
+        assert result is not None
+        data = json.loads(result)
+        assert data["revised_text"] == "条款内容"
+
+    def test_nested_json_structure(self, redliner):
+        """嵌套 JSON 结构应正确提取"""
+        response = '结果：\n{"revised_text": "新条款", "details": {"reason": "合规"}}\n以上。'
+        result = redliner._extract_json(response)
+        assert result is not None
+        data = json.loads(result)
+        assert data["revised_text"] == "新条款"
+        assert data["details"]["reason"] == "合规"
+
+    def test_no_json_returns_none(self, redliner):
+        """无 JSON 内容时应返回 None"""
+        response = "这是一个纯文本响应，没有 JSON"
+        result = redliner._extract_json(response)
+        assert result is None
+
+    def test_empty_string_returns_none(self, redliner):
+        """空字符串应返回 None"""
+        result = redliner._extract_json("")
+        assert result is None
+
+    def test_malformed_json_in_code_fence_returns_none(self, redliner):
+        """代码块中畸形 JSON 应返回 None"""
+        response = '```json\n{"revised_text": "未闭合\n```'
+        result = redliner._extract_json(response)
+        assert result is None
 
 
 # ============================================

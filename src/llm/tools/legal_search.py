@@ -6,6 +6,7 @@
 
 from typing import Any
 
+from src.infra.utils import extract_char_ngrams
 from src.llm.tools.base import BaseTool, ToolDefinition, ToolResult
 
 
@@ -125,7 +126,7 @@ class LegalSearchTool(BaseTool):
         """关键词回退搜索（中文字符 n-gram 匹配）"""
         results = []
         query_lower = query.lower()
-        query_ngrams = self._extract_ngrams(query_lower)
+        query_ngrams = extract_char_ngrams(query_lower)
 
         for provision in self._local_kb:
             if category and provision.get("category") != category:
@@ -137,7 +138,7 @@ class LegalSearchTool(BaseTool):
             exact_match = query_lower in text
 
             # n-gram 匹配（模糊）
-            text_ngrams = self._extract_ngrams(text)
+            text_ngrams = extract_char_ngrams(text)
             if query_ngrams and text_ngrams:
                 overlap = len(query_ngrams & text_ngrams)
                 ngram_score = overlap / len(query_ngrams)
@@ -166,12 +167,3 @@ class LegalSearchTool(BaseTool):
 
         results.sort(key=lambda x: x["score"], reverse=True)
         return results[:5]
-
-    @staticmethod
-    def _extract_ngrams(text: str, n: int = 2) -> set:
-        """提取字符 n-gram（用于中文模糊匹配）"""
-        # 移除空格和标点
-        cleaned = "".join(c for c in text if c.isalnum())
-        if len(cleaned) < n:
-            return {cleaned} if cleaned else set()
-        return {cleaned[i : i + n] for i in range(len(cleaned) - n + 1)}

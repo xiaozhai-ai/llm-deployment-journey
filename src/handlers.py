@@ -8,7 +8,6 @@
 import asyncio
 import atexit
 import os
-import signal
 import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -53,11 +52,6 @@ def _cleanup_temp_files():
 
 atexit.register(_cleanup_temp_files)
 atexit.register(lambda: _executor.shutdown(wait=False))
-for _sig in (signal.SIGTERM, signal.SIGINT):
-    try:
-        signal.signal(_sig, lambda s, f: (_cleanup_temp_files(), signal.default_int_handler(s, f)))
-    except (OSError, ValueError):
-        pass  # 非主线程无法设置信号
 
 
 def _run_async_in_thread(coro):
@@ -297,13 +291,6 @@ def make_chat_handler(llm_client_factory):
     3. 历史裁剪 — 只发送最近 N 条消息给 LLM
     4. 快速回复 — 常见问题无需调用 LLM
     """
-    _cached_client = None
-
-    def _get_client():
-        nonlocal _cached_client
-        if _cached_client is None:
-            _cached_client = llm_client_factory()
-        return _cached_client
 
     def chat_respond(message: str, history: list):
         if not message:
@@ -335,7 +322,7 @@ def make_chat_handler(llm_client_factory):
             history.append({"role": "assistant", "content": ""})
 
             try:
-                client = _get_client()
+                client = llm_client_factory()
                 llm_messages = _build_llm_messages(history[:-2], message)
 
                 accumulated = ""
@@ -408,6 +395,11 @@ def load_risk_options() -> list:
 
 def submit_feedback(risk_idx, action, comment, corrected_level) -> str:
     """提交修正反馈"""
+    try:
+        risk_idx = int(risk_idx)
+    except (TypeError, ValueError):
+        return "⚠️ 请选择有效的风险项"
+
     if risk_idx == 0:
         return "⚠️ 请先选择风险项"
 
@@ -490,7 +482,12 @@ def make_search_handler(legal_matcher):
         if not keyword:
             return "请输入搜索关键词"
 
-        results = legal_matcher.search_by_keyword(keyword)
+        try:
+            results = legal_matcher.search_by_keyword(keyword)
+        except Exception as e:
+            logger_manager.error(f"法规搜索异常: {e}", exc_info=True)
+            return f"⚠️ 搜索出错，请稍后重试。错误: {type(e).__name__}"
+
         if not results:
             return f"未找到与「{keyword}」相关的法条"
 

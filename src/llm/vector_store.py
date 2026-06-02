@@ -5,16 +5,17 @@
 - RRF 融合排序（Reciprocal Rank Fusion）
 - 支持增量更新法规
 - 增强版：统一异常处理 + 降级策略
+- 嵌入方式：DashScope API（替代本地 ONNX 模型，消除国内下载阻塞）
 """
 
 import hashlib
 import os
 import threading
+import time
 from dataclasses import dataclass
-from pathlib import Path
 
-from src.core.exceptions import VectorSearchError, VectorStoreInitError
 from src.analysis.legal_terms import FORCE_RECALL_TERMS, expand_query, get_legal_terms
+from src.core.exceptions import VectorSearchError, VectorStoreInitError
 from src.infra.logger import logger_manager
 
 try:
@@ -24,8 +25,6 @@ try:
 except ImportError:
     CHROMA_AVAILABLE = False
     logger_manager.warning("ChromaDB 未安装，向量检索功能将不可用")
-
-ONNX_MODEL_FILE = Path.home() / ".cache" / "chroma" / "onnx_models" / "all-MiniLM-L6-v2" / "onnx" / "model.onnx"
 
 
 @dataclass
@@ -37,6 +36,65 @@ class VectorSearchResult:
     metadata: dict
     distance: float
     score: float
+
+
+class _DashScopeEmbeddingFunction:
+    """DashScope text-embedding-v3 嵌入函数（ChromaDB 自定义嵌入接口）"""
+
+    API_PATH = "/api/v1/services/embeddings/text-embedding/text-embedding"
+    MAX_BATCH = 25  # DashScope 单次最多 25 条
+    MAX_RETRIES = 2
+    is_legacy = False
+
+    def __init__(self, api_key: str, api_base: str, model: str):
+        self._api_key = api_key
+        self._api_url = f"{api_base.rstrip('/')}{self.API_PATH}"
+        self._model = model
+        self._client = None
+
+    def _get_client(self):
+        if self._client is None:
+            import httpx
+
+            self._client = httpx.Client(timeout=30.0)
+        return self._client
+
+    def _call_api(self, texts: list[str]) -> list[list[float]]:
+        """单次 API 调用（带重试）"""
+        import httpx
+
+        headers = {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}
+        payload = {"model": self._model, "input": {"texts": texts}, "parameters": {"dimension": 1024}}
+
+        for attempt in range(self.MAX_RETRIES + 1):
+            try:
+                resp = self._get_client().post(self._api_url, json=payload, headers=headers)
+                resp.raise_for_status()
+                data = resp.json()
+                return [item["embedding"] for item in data["output"]["embeddings"]]
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429 and attempt < self.MAX_RETRIES:
+                    time.sleep(2**attempt)
+                    continue
+                raise
+            except Exception:
+                if attempt < self.MAX_RETRIES:
+                    time.sleep(1)
+                    continue
+                raise
+
+    def __call__(self, input: list[str]) -> list[list[float]]:
+        """ChromaDB EmbeddingFunction 接口"""
+        all_embeddings = []
+        for i in range(0, len(input), self.MAX_BATCH):
+            batch = input[i : i + self.MAX_BATCH]
+            all_embeddings.extend(self._call_api(batch))
+        return all_embeddings
+
+    def close(self):
+        if self._client is not None:
+            self._client.close()
+            self._client = None
 
 
 class VectorStore:
@@ -54,8 +112,9 @@ class VectorStore:
         self.embedding_model = embedding_model
         self.client = None
         self.collection = None
+        self._embedding_fn: _DashScopeEmbeddingFunction | None = None
         self._initialized = False
-        self._model_ready = False
+        self._vector_available = False
 
         # 关键词索引（用于精确匹配和强制召回）
         self._keyword_index: dict[str, dict] = {}
@@ -73,36 +132,45 @@ class VectorStore:
             self._initialized = True
             return
 
+        # 初始化嵌入函数
+        try:
+            from src.core.config import get_embedding_config
+
+            emb_cfg = get_embedding_config()
+            self._embedding_fn = _DashScopeEmbeddingFunction(
+                api_key=emb_cfg["api_key"], api_base=emb_cfg["api_base"], model=emb_cfg["model"]
+            )
+            logger_manager.info(f"嵌入模型配置: {emb_cfg['model']} @ {emb_cfg['api_base']}")
+        except Exception as e:
+            logger_manager.warning(f"嵌入函数初始化失败: {e}，将仅使用关键词匹配")
+            self._embedding_fn = None
+
         try:
             self.client = chromadb.PersistentClient(path=self.persist_dir)
             self._init_collection()
             logger_manager.info(f"ChromaDB 初始化成功，持久化目录: {self.persist_dir}")
             self._initialized = True
-            self._model_ready = ONNX_MODEL_FILE.exists()
-            if not self._model_ready:
-                logger_manager.info("嵌入模型未就绪，降级到关键词匹配模式（后台下载中）")
+            self._vector_available = self._embedding_fn is not None
         except Exception as e:
             logger_manager.warning(f"ChromaDB 初始化失败: {e}")
             self.client = None
             self.collection = None
             self._initialized = True
-            self._model_ready = False
+            self._vector_available = False
 
     def _init_collection(self):
-        """初始化或创建集合"""
+        """初始化或创建集合（使用 API 嵌入函数）"""
+        ef = self._embedding_fn if self._embedding_fn else None
         try:
-            self.collection = self.client.get_collection(self.COLLECTION_NAME)
-            logger_manager.debug(f"成功加载集合: {self.COLLECTION_NAME}")
+            self.collection = self.client.get_or_create_collection(
+                name=self.COLLECTION_NAME,
+                metadata={"description": "中国法律法规知识库"},
+                embedding_function=ef,
+            )
+            logger_manager.debug(f"成功加载/创建集合: {self.COLLECTION_NAME}")
         except Exception as e:
-            logger_manager.debug(f"集合 {self.COLLECTION_NAME} 不存在，将创建新集合: {e}")
-            try:
-                self.collection = self.client.create_collection(
-                    name=self.COLLECTION_NAME, metadata={"description": "中国法律法规知识库"}
-                )
-                logger_manager.info(f"创建新集合: {self.COLLECTION_NAME}")
-            except Exception as e:
-                logger_manager.error(f"创建 ChromaDB 集合失败: {e}")
-                raise VectorStoreInitError(f"创建向量集合失败: {e}") from e
+            logger_manager.error(f"创建 ChromaDB 集合失败: {e}")
+            raise VectorStoreInitError(f"创建向量集合失败: {e}") from e
 
     def add_provision(
         self, law: str, article: str, title: str, content: str, category: str = "", keywords: list[str] = None
@@ -136,13 +204,8 @@ class VectorStore:
         if CHROMA_AVAILABLE and self.collection:
             try:
                 self.collection.add(documents=[document], metadatas=[metadata], ids=[entry_id])
-            except RuntimeError as e:
-                if "downloading" in str(e).lower() or "not found" in str(e).lower():
-                    if not hasattr(self, "_model_warned"):
-                        logger_manager.info("嵌入模型下载中，法条暂存关键词索引，模型就绪后自动补入向量库")
-                        self._model_warned = True
-                else:
-                    logger_manager.warning(f"向量库添加失败: {e}")
+            except Exception as e:
+                logger_manager.warning(f"向量库添加失败（法条暂存关键词索引）: {e}")
 
         # 更新关键词索引（线程安全）
         with self._index_lock:

@@ -234,6 +234,11 @@ class PlaybookManager:
                 try:
                     playbook = self._load_playbook_from_yaml(filepath)
                     if playbook:
+                        if playbook.id in self.playbooks:
+                            logger_manager.warning(
+                                f"自定义策略「{playbook.id}」（来自 {filename}）"
+                                f"将覆盖已有策略「{self.playbooks[playbook.id].name}」"
+                            )
                         self.playbooks[playbook.id] = playbook
                 except Exception as e:
                     logger_manager.warning(f"加载策略文件失败 {filepath}: {e}")

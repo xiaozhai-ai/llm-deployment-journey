@@ -33,6 +33,8 @@ class ReportGenerator:
         "建议咨询具有执业资格的律师进行复核。"
     )
 
+    _LEVEL_CN = {"critical": "严重", "high": "高", "medium": "中", "low": "低"}
+
     def __init__(self):
         pass
 
@@ -86,7 +88,8 @@ class ReportGenerator:
             parts.append(freshness_section)
 
         # 免责声明
-        parts.append(self._generate_disclaimer())
+        timeliness = get_freshness_checker().get_freshness_disclaimer()
+        parts.append(self._generate_disclaimer(timeliness))
 
         return "\n\n".join(parts)
 
@@ -276,7 +279,8 @@ class ReportGenerator:
 
         for risk in risk_result.risks:
             if risk.suggestion:
-                suggestions.append(f"- [{risk.risk_level.upper()}] {risk.name}: {risk.suggestion}")
+                level_cn = self._LEVEL_CN.get(risk.risk_level, risk.risk_level)
+                suggestions.append(f"- [{level_cn}] {risk.name}: {risk.suggestion}")
 
         if not suggestions:
             return "## 💡 合规建议\n\n暂无额外建议。"
@@ -287,10 +291,10 @@ class ReportGenerator:
 
 > 💡 以上建议仅供参考，具体修改方案需结合业务实际情况并由专业律师确认。"""
 
-    def _generate_disclaimer(self) -> str:
+    def _generate_disclaimer(self, timeliness_disclaimer: str = "") -> str:
         """生成免责声明 + 时效性声明"""
-        freshness = get_freshness_checker()
-        timeliness_disclaimer = freshness.get_freshness_disclaimer()
+        if not timeliness_disclaimer:
+            timeliness_disclaimer = get_freshness_checker().get_freshness_disclaimer()
 
         return f"""---
 

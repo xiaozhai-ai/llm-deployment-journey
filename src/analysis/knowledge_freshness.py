@@ -5,6 +5,7 @@
 - 提供知识库状态报告
 """
 
+import threading
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
@@ -67,6 +68,9 @@ class KnowledgeFreshnessChecker:
     VERIFICATION_THRESHOLD_DAYS = 180  # 6个月未验证标记为需核实
     CRITICAL_THRESHOLD_DAYS = 365  # 1年未验证标记为高风险
 
+    # 类级缓存锁（防止并发初始化竞态）
+    _lock = threading.Lock()
+
     STATUS_LABELS = {
         LegalStatus.ACTIVE: "现行有效",
         LegalStatus.AMENDED: "已修订",
@@ -76,38 +80,42 @@ class KnowledgeFreshnessChecker:
     }
 
     def __init__(self, kb_path: str | None = None, case_path: str | None = None):
-        # 类级别缓存：同参数不重复加载
         cache_key = (kb_path, case_path)
-        if hasattr(KnowledgeFreshnessChecker, "_cache") and KnowledgeFreshnessChecker._cache_key == cache_key:
-            self.provisions = KnowledgeFreshnessChecker._cached_provisions
-            self.cases = KnowledgeFreshnessChecker._cached_cases
-            return
 
-        self.provisions = []
-        self.cases = []
+        with KnowledgeFreshnessChecker._lock:
+            if (
+                hasattr(KnowledgeFreshnessChecker, "_cache")
+                and KnowledgeFreshnessChecker._cache_key == cache_key
+            ):
+                self.provisions = KnowledgeFreshnessChecker._cached_provisions
+                self.cases = KnowledgeFreshnessChecker._cached_cases
+                return
 
-        # 从配置模块获取路径
-        paths_config = get_paths_config()
+            self.provisions = []
+            self.cases = []
 
-        if kb_path:
-            self._load_provisions(kb_path)
-        else:
-            default_kb = paths_config["kb_path"]
-            if default_kb.exists():
-                self._load_provisions(str(default_kb))
+            # 从配置模块获取路径
+            paths_config = get_paths_config()
 
-        if case_path:
-            self._load_cases(case_path)
-        else:
-            default_cases = paths_config["case_law_path"]
-            if default_cases.exists():
-                self._load_cases(str(default_cases))
+            if kb_path:
+                self._load_provisions(kb_path)
+            else:
+                default_kb = paths_config["kb_path"]
+                if default_kb.exists():
+                    self._load_provisions(str(default_kb))
 
-        # 类级别缓存
-        KnowledgeFreshnessChecker._cached_provisions = self.provisions
-        KnowledgeFreshnessChecker._cached_cases = self.cases
-        KnowledgeFreshnessChecker._cache_key = cache_key
-        KnowledgeFreshnessChecker._cache = True
+            if case_path:
+                self._load_cases(case_path)
+            else:
+                default_cases = paths_config["case_law_path"]
+                if default_cases.exists():
+                    self._load_cases(str(default_cases))
+
+            # 类级别缓存
+            KnowledgeFreshnessChecker._cached_provisions = self.provisions
+            KnowledgeFreshnessChecker._cached_cases = self.cases
+            KnowledgeFreshnessChecker._cache_key = cache_key
+            KnowledgeFreshnessChecker._cache = True
 
     @staticmethod
     def _parse_date(date_str: str | None) -> date | None:

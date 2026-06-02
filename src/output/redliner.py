@@ -8,8 +8,10 @@
 
 import difflib
 import io
+import json
 import re
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from src.core.exceptions import DOCXGenerationError, RevisionError
 from src.infra.logger import logger_manager
@@ -148,23 +150,7 @@ class Redliner:
                 prompt, system_prompt="法律文书修订助手。仅返回 JSON。", temperature=0.3, max_tokens=1000
             )
 
-            import json
-
-            json_str = None
-            # 策略1：匹配包含 revised_text 的完整 JSON 对象
-            m = re.search(r'\{[\s\S]*?"revised_text"[\s\S]*?\}', response)
-            if m:
-                json_str = m.group()
-            # 策略2：从 markdown 代码块中提取
-            if not json_str:
-                m = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", response)
-                if m:
-                    json_str = m.group(1)
-            # 策略3：匹配任意 JSON 对象
-            if not json_str:
-                m = re.search(r"\{[\s\S]*?\}", response)
-                if m:
-                    json_str = m.group()
+            json_str = self._extract_json(response)
 
             if json_str:
                 try:
@@ -181,6 +167,42 @@ class Redliner:
         except Exception as e:
             logger_manager.error(f"LLM 修订生成失败: {e}")
             raise RevisionError(f"LLM 修订生成失败: {e}", error_code="LLM_REVISION_ERROR") from e
+
+    @staticmethod
+    def _extract_json(text: str) -> str | None:
+        """从 LLM 响应中提取 JSON 对象，支持嵌套花括号"""
+        # 策略1：从 markdown 代码块中提取
+        m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+        if m:
+            candidate = m.group(1)
+            try:
+                json.loads(candidate)
+                return candidate
+            except json.JSONDecodeError:
+                pass
+
+        # 策略2：括号计数法提取第一个完整 JSON 对象
+        start = text.find("{")
+        if start != -1:
+            depth = 0
+            for i in range(start, len(text)):
+                if text[i] == "{":
+                    depth += 1
+                elif text[i] == "}":
+                    depth -= 1
+                if depth == 0:
+                    candidate = text[start : i + 1]
+                    try:
+                        json.loads(candidate)
+                        return candidate
+                    except json.JSONDecodeError:
+                        break
+
+        # 策略3：贪婪正则 fallback（处理 LLM 输出不规范的极端情况）
+        m = re.search(r"\{.*\}", text, re.DOTALL)
+        if m:
+            return m.group()
+        return None
 
     def _generate_html_diff(self, original: str, revised: str) -> str:
         """
@@ -441,7 +463,7 @@ class Redliner:
         footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = footer.add_run(
             "本报告由「合同卫士」AI 审查系统自动生成 | 生成时间："
-            + __import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M")
+            + datetime.now().strftime("%Y-%m-%d %H:%M")
         )
         run.font.color.rgb = RGBColor(128, 128, 128)
         run.font.size = Pt(9)

@@ -10,6 +10,7 @@ from typing import Any
 import yaml
 
 from src.core.config import get_paths_config
+from src.infra.utils import bigram_jaccard
 from src.llm.tools.base import BaseTool, ToolDefinition, ToolResult
 
 
@@ -136,10 +137,17 @@ class CaseSearchTool(BaseTool):
         )
 
     def _search_cases(self, query: str, court_level: str | None = None, case_type: str | None = None) -> list[dict]:
-        """检索案例（关键词 + 字符二元组混合匹配）"""
+        """
+        检索案例（关键词 + 二元组混合匹配，分数归一化到 0~1）
+
+        匹配权重说明：
+        - keyword_score: 查询词在可搜索文本中的命中数（每词 2 分）
+        - direct_match: 查询词在 case keywords 列表中的命中数（每词 3 分，精确匹配权重更高）
+        - bigram_score: 字符二元组 Jaccard 相似度（0~1，×5 归一化到与其他分数可比的量级）
+        - 归一化: match_score / max_possible_score → 0~1 范围
+        """
         query_lower = query.lower()
         query_words = [w for w in query_lower.split() if len(w) >= 2]
-        query_bigrams = set(query_lower[i : i + 2] for i in range(len(query_lower) - 1))
 
         results = []
         for case in self.cases:
@@ -149,31 +157,30 @@ class CaseSearchTool(BaseTool):
             if case_type and case_type != case.get("case_type", ""):
                 continue
 
-            # 计算匹配度
             searchable = (
                 f"{case.get('title', '')} {case.get('issue', '')} "
                 f"{case.get('holding', '')} {' '.join(case.get('keywords', []))}"
             ).lower()
 
-            # 关键词匹配（权重高）
+            # 关键词匹配（权重 2）
             keyword_score = sum(2 for w in query_words if w in searchable)
 
-            # 关键词直接匹配 case keywords 列表（权重更高）
+            # 关键词直接匹配 case keywords 列表（权重 3）
             case_keywords_text = " ".join(case.get("keywords", [])).lower()
             direct_match = sum(3 for w in query_words if w in case_keywords_text)
 
-            # 字符二元组 Jaccard 相似度（捕捉模糊匹配）
-            searchable_bigrams = set(searchable[i : i + 2] for i in range(len(searchable) - 1))
-            if query_bigrams and searchable_bigrams:
-                bigram_score = len(query_bigrams & searchable_bigrams) / len(query_bigrams | searchable_bigrams)
-                bigram_score *= 5  # 归一化到与其他分数可比的量级
-            else:
-                bigram_score = 0
+            # 字符二元组 Jaccard 相似度（0~1，×5 归一化）
+            bigram_score = bigram_jaccard(query_lower, searchable) * 5
 
-            match_score = keyword_score + direct_match + bigram_score
-            if match_score > 0:
-                results.append({**case, "match_score": match_score})
+            raw_score = keyword_score + direct_match + bigram_score
+            if raw_score <= 0:
+                continue
 
-        # 按匹配度排序
+            # 归一化到 0~1：最大可能分数 = 所有查询词都命中(2+3) + 完美二元组(5)
+            max_possible = len(query_words) * 5 + 5 if query_words else 1
+            normalized = min(1.0, raw_score / max_possible)
+
+            results.append({**case, "match_score": round(normalized, 3)})
+
         results.sort(key=lambda x: x.get("match_score", 0), reverse=True)
         return results[:5]

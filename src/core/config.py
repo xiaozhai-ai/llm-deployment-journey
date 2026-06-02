@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     llm_api_base: AnyHttpUrl = Field(default="https://token-plan-cn.xiaomimimo.com/v1", description="LLM API 端点")
     llm_model: str = Field(default="mimo-v2.5-pro", description="LLM 模型名称")
 
+    # 嵌入模型配置（用于 ChromaDB 向量检索，独立于 LLM API）
+    embedding_api_base: AnyHttpUrl = Field(default="https://dashscope.aliyuncs.com", description="嵌入 API 端点")
+    embedding_api_key: str = Field(default="", description="嵌入 API 密钥（空则回退 LLM_API_KEY）")
+    embedding_model: str = Field(default="text-embedding-v3", description="嵌入模型名称")
+
     # 文件处理配置
     max_file_size_mb: int = Field(default=10, ge=1, le=100, description="最大文件大小（MB）")
 
@@ -107,6 +112,16 @@ def get_llm_config() -> dict:
     """获取 LLM 配置"""
     settings = get_settings()
     return {"api_key": settings.llm_api_key, "api_base": str(settings.llm_api_base), "model": settings.llm_model}
+
+
+def get_embedding_config() -> dict:
+    """获取嵌入模型配置（API key 为空时回退到 LLM_API_KEY）"""
+    settings = get_settings()
+    return {
+        "api_base": str(settings.embedding_api_base).rstrip("/"),
+        "api_key": settings.embedding_api_key or settings.llm_api_key,
+        "model": settings.embedding_model,
+    }
 
 
 def get_file_config() -> dict:

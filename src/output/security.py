@@ -105,7 +105,7 @@ class SecurityPreprocessor:
     def _detect_sensitive_info(self, text: str) -> list[SensitiveInfo]:
         """检测文本中的敏感信息"""
         items = []
-        seen_spans: set[tuple[int, int]] = set()
+        seen_spans: list[tuple[int, int]] = []
 
         for info_type, pattern in self.patterns.items():
             for match in pattern.finditer(text):
@@ -116,13 +116,13 @@ class SecurityPreprocessor:
                 if info_type == "银行卡号" and not self._luhn_check(value):
                     continue
 
-                # 跳过已被更精确模式匹配的区间
-                if span in seen_spans:
+                # 跳过与已匹配区间重叠的匹配
+                if any(span[0] < s[1] and span[1] > s[0] for s in seen_spans):
                     continue
 
                 masked = self._mask_value(value, info_type)
                 items.append(SensitiveInfo(type=info_type, position=span, masked_value=masked))
-                seen_spans.add(span)
+                seen_spans.append(span)
 
         return items
 
@@ -152,7 +152,9 @@ class SecurityPreprocessor:
             return value[:3] + "****" + value[-4:]
         elif info_type == "邮箱":
             parts = value.split("@")
-            return parts[0][:2] + "***@" + parts[1]
+            local = parts[0]
+            visible = local[: max(1, len(local) // 2)]
+            return visible + "***@" + parts[1]
         elif info_type == "银行卡号":
             return value[:4] + "****" + value[-4:]
         elif info_type == "统一社会信用代码":
@@ -166,15 +168,13 @@ class SecurityPreprocessor:
         Returns:
             Tuple[是否超出范围, 原因]
         """
-        text_lower = text.lower()
-
         # 安全词出现时抑制范围检测（说明文档在合法引用法律条文）
-        safe_hits = sum(1 for kw in self.OUT_OF_SCOPE_SAFE_KEYWORDS if kw in text_lower)
+        safe_hits = sum(1 for kw in self.OUT_OF_SCOPE_SAFE_KEYWORDS if kw in text)
         if safe_hits >= 2:
             return False, None
 
         for keyword in self.OUT_OF_SCOPE_KEYWORDS:
-            if keyword in text_lower:
+            if keyword in text:
                 return True, f"检测到可能超出处理范围的内容：'{keyword}'，建议转交专业律师处理"
 
         return False, None

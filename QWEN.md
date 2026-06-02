@@ -15,7 +15,7 @@
 ## 技术栈
 
 - Python 3.10+ / Gradio UI
-- ChromaDB 向量检索
+- ChromaDB 向量检索（DashScope text-embedding-v3 API 嵌入）
 - LLM: 通义千问 (qwen-plus) 兼容接口
 - 部署: Hugging Face Spaces / 本地
 
@@ -96,7 +96,7 @@ src/analysis/
 ```
 src/llm/
 ├── llm_client.py         # LLM API 客户端：chat + tool-calling + SSE 流式 + 重试
-├── vector_store.py       # ChromaDB 向量库：多路召回 + RRF 融合排序 + 降级
+├── vector_store.py       # ChromaDB 向量库：API 嵌入 + 多路召回 + RRF 融合排序 + 降级
 ├── tool_agent.py         # Tool-Calling Agent：LLM + 工具调用 + 自我反思循环
 └── tools/                # 工具集
     ├── base.py           #   工具基类 + 注册表
@@ -183,6 +183,9 @@ RiskAnalysisResult {risks[], metadata, analysis_time}
 | `LLM_API_KEY` | API 密钥 (必需) |
 | `LLM_API_BASE` | API URL (默认通义千问) |
 | `LLM_MODEL` | 模型名 (默认 qwen-plus) |
+| `EMBEDDING_API_BASE` | 嵌入 API 端点 (默认 DashScope) |
+| `EMBEDDING_API_KEY` | 嵌入 API 密钥 (空则回退 LLM_API_KEY) |
+| `EMBEDDING_MODEL` | 嵌入模型名 (默认 text-embedding-v3) |
 
 ## CI/CD 约定
 

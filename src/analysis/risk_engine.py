@@ -17,10 +17,11 @@ from typing import Any
 
 import yaml
 
+from src.analysis.playbook_manager import Playbook, PlaybookManager
 from src.core.config import get_paths_config
 from src.core.exceptions import LLMError, LLMNetworkError, LLMTimeoutError, RiskAnalysisError, RuleLoadError
 from src.infra.logger import logger_manager
-from src.analysis.playbook_manager import Playbook, PlaybookManager
+from src.infra.utils import extract_json, text_similarity
 from src.llm.tool_agent import AgentOutput, ToolCallingAgent
 from src.llm.tools.ambiguity_check import AmbiguityCheckTool
 from src.llm.tools.base import ToolRegistry
@@ -74,6 +75,14 @@ class RiskEngine:
     RISK_LEVEL_MAP = {"critical": 4, "high": 3, "medium": 2, "low": 1}
 
     RISK_LEVEL_CN = {"critical": "严重", "high": "高", "medium": "中", "low": "低"}
+
+    # 条款溯源匹配时的截断长度
+    CLAUSE_MATCH_PREFIX_LEN = 80
+    CLAUSE_MATCH_CONTAINS_LEN = 100
+
+    # 默认分段参数
+    DEFAULT_MAX_SEGMENT_LENGTH = 5000
+    DEFAULT_MAX_SEGMENTS = 3
 
     def __init__(
         self, rules_path: str | None = None, playbooks_dir: str | None = None, vector_store: VectorStore | None = None
@@ -347,8 +356,6 @@ class RiskEngine:
 
                 # 名称相同 + 条款预览高度相似（相似度 > 0.8）
                 if name_key == existing_name and preview_key and existing_preview:
-                    from src.infra.utils import text_similarity
-
                     sim = text_similarity(preview_key, existing_preview, max_chars=100)
                     if sim > 0.8:
                         found_duplicate = True
@@ -415,14 +422,14 @@ class RiskEngine:
 
         # 策略2：内容前缀匹配
         if len(preview) > 20:
-            prefix = preview[:80]
+            prefix = preview[: self.CLAUSE_MATCH_PREFIX_LEN]
             for clause in clauses:
                 if clause.content.startswith(prefix[:40]):
                     return clause
 
         # 策略3：内容包含匹配
         if len(preview) > 20:
-            search_text = preview[:100]
+            search_text = preview[: self.CLAUSE_MATCH_CONTAINS_LEN]
             for clause in clauses:
                 if search_text[:50] in clause.content:
                     return clause
@@ -449,6 +456,7 @@ class RiskEngine:
         llm_client,
         playbook: Playbook | None = None,
         progress_callback: Callable[[dict], None] | None = None,
+        max_segments: int | None = None,
     ) -> RiskAnalysisResult:
         """
         使用 LLM 进行深入浅出分析
@@ -462,17 +470,22 @@ class RiskEngine:
             llm_client: LLM 客户端
             playbook: 审查策略
             progress_callback: 进度回调，接收 dict {type, tool, content, risk_name, step}
+            max_segments: 最大分析段数，默认 DEFAULT_MAX_SEGMENTS
         """
-        max_segment_length = 5000
-        max_segments = 3
+        max_segment_length = self.DEFAULT_MAX_SEGMENT_LENGTH
+        effective_max_segments = max_segments or self.DEFAULT_MAX_SEGMENTS
         segments = self._split_into_segments(text, max_segment_length)
 
         # 超长文档：保留首段+末段+中间一段，避免 token 爆炸
-        if len(segments) > max_segments:
+        if len(segments) > effective_max_segments:
             original_count = len(segments)
-            mid = len(segments) // 2
-            segments = [segments[0], segments[mid], segments[-1]]
-            logger_manager.info(f"文档过长（{original_count}段），仅分析首/中/末 3 段以控制成本")
+            kept_indices = [0, len(segments) // 2, len(segments) - 1][:effective_max_segments]
+            segments = [segments[i] for i in kept_indices]
+            logger_manager.info(
+                f"文档过长（{original_count}段），仅分析 {len(segments)} 段"
+                f"（第{','.join(str(i + 1) for i in kept_indices)}段），"
+                f"共丢弃 {original_count - len(segments)} 段内容"
+            )
 
         extra_context = ""
         role_context = ""
@@ -599,7 +612,12 @@ class RiskEngine:
             raise RiskAnalysisError(f"LLM 风险分析失败: {e}", error_code="LLM_ANALYSIS_UNKNOWN") from e
 
     def _get_tool_agent(self, llm_client) -> ToolCallingAgent:
-        """创建 Tool Agent（每次新建，避免持有旧 llm_client 引用）"""
+        """创建 Tool Agent，注入 llm_client 到依赖它的工具"""
+        # 注入 llm_client 到歧义检测工具（注册时无法获取，延迟注入）
+        ambiguity_tool = self.tool_registry.get("check_clause_ambiguity")
+        if ambiguity_tool and hasattr(ambiguity_tool, "set_llm_client"):
+            ambiguity_tool.set_llm_client(llm_client)
+
         return ToolCallingAgent(llm_client=llm_client, tool_registry=self.tool_registry, max_iterations=2)
 
     @staticmethod
@@ -652,34 +670,21 @@ class RiskEngine:
         解析 LLM 返回的 JSON 响应
 
         容错处理：
-        1. 去除 markdown 代码块标记（```json ... ```）
-        2. 去除首尾空白字符
-        3. 尝试多种 JSON 提取策略
+        1. 使用公共 extract_json 函数（支持 markdown 代码块、嵌套 JSON）
+        2. 支持数组和对象两种格式
+        3. 字段校验和截断
         """
         risks = []
         try:
-            # 策略1：去除 markdown 代码块
-            cleaned = response.strip()
+            raw = extract_json(response)
+            if raw is None:
+                return risks
 
-            # 去除 ```json ... ``` 或 ``` ... ```
-            md_pattern = r"```(?:json)?\s*([\s\S]*?)```"
-            md_match = re.search(md_pattern, cleaned)
-            if md_match:
-                cleaned = md_match.group(1).strip()
+            data = json.loads(raw)
 
-            # 策略2：提取 JSON 数组
-            json_match = re.search(r"\[[\s\S]*\]", cleaned)
-            if json_match:
-                data = json.loads(json_match.group())
-            else:
-                # 策略3：尝试提取 JSON 对象（有时 LLM 会返回对象而非数组）
-                obj_match = re.search(r"\{[\s\S]*\}", cleaned)
-                if obj_match:
-                    obj = json.loads(obj_match.group())
-                    # 如果对象中包含 risks 数组
-                    data = obj.get("risks", []) if isinstance(obj.get("risks"), list) else [obj]
-                else:
-                    return risks
+            # 支持对象格式：{"risks": [...]} 或单个对象
+            if isinstance(data, dict):
+                data = data.get("risks", []) if isinstance(data.get("risks"), list) else [data]
 
             if not isinstance(data, list):
                 return risks
@@ -830,7 +835,15 @@ class RiskEngine:
         legal_density = legal_hits / word_count
 
         # 计算代码信号命中数
-        code_hits = sum(1 for kw in self.CODE_SIGNAL_KEYWORDS if kw in text_lower)
+        # 英文关键词需要精确匹配（避免 "进口" 误触 "import "，"从而" 误触 "from " 等）
+        code_hits = 0
+        for kw in self.CODE_SIGNAL_KEYWORDS:
+            if kw.isascii() and len(kw) <= 7:
+                # 短英文关键词：要求单词边界（空格/括号/点/引号等分隔）
+                if re.search(r"(?<![a-zA-Z])" + re.escape(kw) + r"(?![a-zA-Z])", text_lower):
+                    code_hits += 1
+            elif kw in text_lower:
+                code_hits += 1
 
         # 代码信号多 → 提高法律阈值
         effective_min = self.MIN_LEGAL_SCORE

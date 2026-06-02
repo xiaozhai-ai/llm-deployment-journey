@@ -123,7 +123,12 @@ def build_trace_view() -> tuple:
     """构建溯源对照视图，返回 (clauses_html, risks_html)"""
     session_id = review_store.latest_session_id
     if not session_id:
-        return "请先进行文件审查", "暂无风险"
+        return (
+            '<div style="text-align:center;padding:40px;color:#6c757d;">'
+            "📋 请先在「文件审查」Tab 上传并审查文件，此处将展示条款与风险的对照视图。</div>",
+            '<div style="text-align:center;padding:40px;color:#6c757d;">'
+            "⚠️ 暂无风险数据，请先完成文件审查。</div>",
+        )
 
     clauses = review_store.get_clauses(session_id)
     risks = review_store.get_risks(session_id)
