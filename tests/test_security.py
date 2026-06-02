@@ -141,12 +141,14 @@ class TestOutOfScope:
         assert result.out_of_scope
 
     def test_foreign_law(self, sp):
+        # "境外法律" 已从范围检测中移除，常见于跨境合同不应拦截
         result = sp.check_text("本合同适用境外法律规定")
-        assert result.out_of_scope
+        assert not result.out_of_scope
 
     def test_ip_litigation(self, sp):
+        # "知识产权诉讼" 已从范围检测中移除，常见于许可合同不应拦截
         result = sp.check_text("涉及知识产权诉讼案件")
-        assert result.out_of_scope
+        assert not result.out_of_scope
 
     def test_normal_contract(self, sp):
         result = sp.check_text("甲方应按约定时间支付货款，违约方承担违约责任。")

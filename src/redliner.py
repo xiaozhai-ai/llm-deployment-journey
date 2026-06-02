@@ -150,15 +150,28 @@ class Redliner:
 
             import json
 
-            json_match = re.search(r'\{[^{}]*"revised_text"[^{}]*\}', response)
-            if not json_match:
-                json_match = re.search(r"\{[\s\S]*?\}", response)
-            if json_match:
+            json_str = None
+            # 策略1：匹配包含 revised_text 的完整 JSON 对象
+            m = re.search(r'\{[\s\S]*?"revised_text"[\s\S]*?\}', response)
+            if m:
+                json_str = m.group()
+            # 策略2：从 markdown 代码块中提取
+            if not json_str:
+                m = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", response)
+                if m:
+                    json_str = m.group(1)
+            # 策略3：匹配任意 JSON 对象
+            if not json_str:
+                m = re.search(r"\{[\s\S]*?\}", response)
+                if m:
+                    json_str = m.group()
+
+            if json_str:
                 try:
-                    data = json.loads(json_match.group())
+                    data = json.loads(json_str)
                     return data.get("revised_text", ""), data.get("explanation", "")
                 except json.JSONDecodeError:
-                    logger_manager.warning(f"LLM 修订 JSON 解析失败: {json_match.group()[:200]}")
+                    logger_manager.warning(f"LLM 修订 JSON 解析失败: {json_str[:200]}")
 
             logger_manager.warning(f"LLM 修订响应格式异常: {response[:200]}")
             return "", "LLM 响应格式异常"

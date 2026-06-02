@@ -27,6 +27,23 @@ class Settings(BaseSettings):
     # 文件处理配置
     max_file_size_mb: int = Field(default=10, ge=1, le=100, description="最大文件大小（MB）")
 
+    # OCR 配置
+    ocr_enabled: bool = Field(default=False, description="是否启用 OCR（扫描件/图片 PDF）")
+    ocr_engine: str = Field(default="paddleocr", description="OCR 引擎: paddleocr")
+    ocr_device: str = Field(default="cpu", description="OCR 设备: cpu / gpu:0 / gpu:1")
+    ocr_model_config: str = Field(
+        default="lightweight",
+        description="模型配置: lightweight / server / server_noformula / full",
+    )
+    ocr_seal_detection: bool = Field(default=False, description="是否启用印章检测")
+    ocr_language: str = Field(default="ch", description="OCR 语言: ch / en / japan / korean")
+    ocr_scan_threshold: float = Field(
+        default=0.3,
+        ge=0.0,
+        le=1.0,
+        description="扫描件检测阈值：文本密度低于此值判定为扫描件",
+    )
+
     # HuggingFace 配置
     hf_endpoint: str | None = Field(default=None, description="HuggingFace 镜像端点（国内网络可选）")
 
@@ -125,3 +142,17 @@ def get_paths_config() -> dict:
         raise ValueError(f"策略目录不存在: {paths['playbooks_dir']}")
 
     return paths
+
+
+def get_ocr_config() -> dict:
+    """获取 OCR 配置"""
+    settings = get_settings()
+    return {
+        "enabled": settings.ocr_enabled,
+        "engine": settings.ocr_engine,
+        "device": settings.ocr_device,
+        "model_config": settings.ocr_model_config,
+        "seal_detection": settings.ocr_seal_detection,
+        "language": settings.ocr_language,
+        "scan_threshold": settings.ocr_scan_threshold,
+    }

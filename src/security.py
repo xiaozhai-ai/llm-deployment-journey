@@ -29,22 +29,26 @@ class SecurityCheckResult:
 class SecurityPreprocessor:
     """安全预处理器"""
 
-    # 超出能力范围的关键字
+    # 超出能力范围的关键字（仅在没有安全词抑制时触发）
     OUT_OF_SCOPE_KEYWORDS = [
-        "刑事",
-        "犯罪",
+        "刑事犯罪",
         "刑罚",
         "有期徒刑",
         "拘役",
         "管制",
-        "境外法律",
-        "外国法",
-        "国际法",
-        "涉外",
-        "知识产权诉讼",
-        "专利无效",
-        "税务筹划",
-        "避税",
+        "无期徒刑",
+        "死刑",
+    ]
+
+    # 安全词：出现时抑制对应范围关键词的误报
+    OUT_OF_SCOPE_SAFE_KEYWORDS = [
+        "保密义务",
+        "刑事责任条款",
+        "法律法规",
+        "适用法律",
+        "管辖",
+        "合规",
+        "刑事附带民事",
     ]
 
     def __init__(self):
@@ -163,6 +167,11 @@ class SecurityPreprocessor:
             Tuple[是否超出范围, 原因]
         """
         text_lower = text.lower()
+
+        # 安全词出现时抑制范围检测（说明文档在合法引用法律条文）
+        safe_hits = sum(1 for kw in self.OUT_OF_SCOPE_SAFE_KEYWORDS if kw in text_lower)
+        if safe_hits >= 2:
+            return False, None
 
         for keyword in self.OUT_OF_SCOPE_KEYWORDS:
             if keyword in text_lower:

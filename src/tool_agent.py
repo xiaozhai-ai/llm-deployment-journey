@@ -554,7 +554,16 @@ class ToolCallingAgent:
             idx = response.find("{")
             if idx != -1:
                 decoder = json.JSONDecoder()
-                result_data, _ = decoder.raw_decode(response, idx)
+                try:
+                    result_data, _ = decoder.raw_decode(response, idx)
+                except json.JSONDecodeError as e:
+                    self.logger.warning(f"反思 JSON 解析失败: {e}, 响应前200字: {response[:200]}")
+                    return {
+                        "final_conclusion": draft_conclusion,
+                        "reflection_summary": "⚠️ 反思结果 JSON 格式错误，使用草案结论",
+                        "reflection_passed": False,
+                        "corrections_made": 0,
+                    }
 
                 # 提取结果
                 final = result_data.get("final_conclusion", draft_conclusion)
@@ -577,6 +586,7 @@ class ToolCallingAgent:
                 }
 
             # JSON 解析失败，返回草案
+            self.logger.warning(f"反思响应中未找到 JSON 对象，前200字: {response[:200]}")
             return {
                 "final_conclusion": draft_conclusion,
                 "reflection_summary": "⚠️ 反思结果解析失败，使用草案结论",
@@ -675,7 +685,21 @@ class ToolCallingAgent:
                 else:
                     compressed.append(msg)
 
-        return compressed
+        # 配对完整性校验：如果 assistant(tool_calls) 的某个 id 在压缩后没有对应 tool result，剥离 tool_calls
+        result_tool_ids = {m.get("tool_call_id") for m in compressed if m.get("role") == "tool"}
+        final = []
+        for msg in compressed:
+            if msg.get("role") == "assistant" and msg.get("tool_calls"):
+                missing = [tc for tc in msg["tool_calls"] if tc.get("id") not in result_tool_ids]
+                if missing:
+                    # 有 tool_call 缺 result → 剥离 tool_calls，仅保留 content
+                    final.append({"role": "assistant", "content": msg.get("content") or ""})
+                else:
+                    final.append(msg)
+            else:
+                final.append(msg)
+
+        return final
 
 
 # ===== 向后兼容的数据结构 =====

@@ -106,7 +106,9 @@ class TestKnowledgeBaseLoading:
 
     def test_provisions_synced_to_vector_store(self, matcher, mock_vector_store):
         """法条应同步到向量库"""
-        assert mock_vector_store.add_provision.call_count == 4
+        mock_vector_store.add_provisions_batch.assert_called_once()
+        call_args = mock_vector_store.add_provisions_batch.call_args[0][0]
+        assert len(call_args) == 4
 
     def test_load_nonexistent_file(self, mock_vector_store):
         """加载不存在的文件应抛出异常（YAML 读取失败）"""

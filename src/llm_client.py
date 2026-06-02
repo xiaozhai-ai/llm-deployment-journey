@@ -40,7 +40,10 @@ class LLMClient:
         if not self.api_key:
             raise ValueError("未设置 LLM_API_KEY 环境变量")
         if not self.api_base:
-            self.api_base = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+            raise ValueError(
+                "未设置 LLM_API_BASE 环境变量，请在 .env 或系统环境变量中配置。"
+                "示例: LLM_API_BASE=https://token-plan-cn.xiaomimimo.com/v1"
+            )
 
         self.headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 

@@ -10,3 +10,9 @@ chromadb>=0.4.0,<1.0.0
 python-Levenshtein>=0.21.0
 olefile>=0.47
 python-dotenv>=1.0.0
+Pillow>=10.0.0
+numpy>=1.26.0
+
+# OCR / 版面分析（可选，用于扫描件处理）
+# paddlepaddle>=2.6.0
+# paddleocr>=2.8.0

@@ -8,6 +8,7 @@
 - 增强版：统一异常处理 + 日志记录
 """
 
+import asyncio
 import json
 import re
 from collections.abc import Callable
@@ -82,6 +83,7 @@ class RiskEngine:
         self.playbook_manager = PlaybookManager(playbooks_dir)
         self.vector_store = vector_store or VectorStore()
         self.tool_registry = ToolRegistry()
+        self._rule_summary_cache: dict[str, str] = {}
 
         self._register_tools()
 
@@ -114,6 +116,7 @@ class RiskEngine:
                 config = yaml.safe_load(f)
             self.rules = config.get("risk_rules", [])
             self.document_types = config.get("document_types", {})
+            self._rule_summary_cache.clear()
             logger_manager.info(f"成功加载 {len(self.rules)} 条风险规则")
         except FileNotFoundError:
             logger_manager.error(f"规则文件不存在: {path}")
@@ -282,7 +285,11 @@ class RiskEngine:
         )
 
     def _build_rule_summary(self, document_type: str) -> str:
-        """构建规则清单摘要，用于注入 LLM prompt"""
+        """构建规则清单摘要，用于注入 LLM prompt（结果按 document_type 缓存）"""
+        cache_key = document_type
+        if cache_key in self._rule_summary_cache:
+            return self._rule_summary_cache[cache_key]
+
         applicable_rules = [rule for rule in self.rules if document_type in rule.get("applicable_types", [])]
         level_cn = {"critical": "严重", "high": "高", "medium": "中", "low": "低"}
         lines = []
@@ -291,9 +298,11 @@ class RiskEngine:
             name = rule["name"]
             level = level_cn.get(rule.get("risk_level", "medium"), "中")
             desc = rule.get("description", "")
-            basis = rule.get("legal_basis", "")
-            lines.append(f"- [{rid}] {name}（风险等级：{level}）— {desc} 法律依据：{basis}")
-        return "\n".join(lines)
+            # 压缩格式：去掉冗余的法律依据字段（已在规则 YAML 中，LLM 不需要重复）
+            lines.append(f"[{rid}]{name}({level}):{desc}")
+        result = "\n".join(lines)
+        self._rule_summary_cache[cache_key] = result
+        return result
 
     def deduplicate_risks(self, risks: list[RiskItem]) -> list[RiskItem]:
         """
@@ -329,17 +338,19 @@ class RiskEngine:
 
             # 如果 rule_id 不存在，基于名称 + 条款预览匹配
             name_key = risk.name.lower()
-            preview_key = (risk.clause_content_preview or "")[:50].lower()
+            preview_key = (risk.clause_content_preview or "")[:100].lower()
 
             found_duplicate = False
             for key, existing in seen.items():
                 existing_name = existing.name.lower()
-                existing_preview = (existing.clause_content_preview or "")[:50].lower()
+                existing_preview = (existing.clause_content_preview or "")[:100].lower()
 
-                # 名称相同 + 条款预览相似度高
+                # 名称相同 + 条款预览高度相似（相似度 > 0.8）
                 if name_key == existing_name and preview_key and existing_preview:
-                    # 简单判断：预览有重叠
-                    if preview_key in existing_preview or existing_preview in preview_key:
+                    from src.utils import text_similarity
+
+                    sim = text_similarity(preview_key, existing_preview, max_chars=100)
+                    if sim > 0.8:
                         found_duplicate = True
                         # 保留风险等级更高的
                         if self.RISK_LEVEL_MAP.get(risk.risk_level, 0) > self.RISK_LEVEL_MAP.get(
@@ -482,33 +493,47 @@ class RiskEngine:
 
         all_risks: list[RiskItem] = []
 
-        try:
-            for seg_idx, segment in enumerate(segments):
-                seg_label = f"[第{seg_idx + 1}/{len(segments)}段]" if len(segments) > 1 else ""
+        # 构建每段的 prompt 和调用任务
+        system_prompt = "你是中国法律审查助手，精通民法典、个人信息保护法等法律法规。按规则清单分析，仅返回 JSON 数组。"
+        concurrency = min(len(segments), 3)  # 限制并发避免 rate limit
+        semaphore = asyncio.Semaphore(concurrency)
 
-                prompt = f"""{extra_context}
-你是法律审查助手，请严格对照以下审查规则逐条分析文档风险。
-{seg_label}
-
-【审查规则清单】
-{rule_summary}
-
-【分析要求】
-1. 逐条对照上述规则，判断文档是否触发每条规则
-2. 仅返回你确认触发的风险，不要猜测
-3. 每项返回：name, category, risk_level(high/medium/low), description, clause_preview(≤80字), legal_basis, suggestion, confidence(0-1)
-4. 返回 JSON 数组格式
-
-【待审文档】
-{segment}"""
-
+        async def _analyze_segment(seg_idx: int, segment: str) -> list[RiskItem]:
+            seg_label = f"[{seg_idx + 1}/{len(segments)}]" if len(segments) > 1 else ""
+            prompt = (
+                f"{extra_context}\n"
+                f"法律审查助手，对照规则分析风险{seg_label}\n\n"
+                f"【规则】\n{rule_summary}\n\n"
+                f"【要求】仅返回触发的风险JSON数组，每项含："
+                f"name,category,risk_level(high/medium/low),description,"
+                f"clause_preview(≤80字),legal_basis,suggestion,confidence(0-1)\n\n"
+                f"【文档】\n{segment}"
+            )
+            async with semaphore:
                 response = await llm_client.chat_completion(
                     prompt,
-                    system_prompt="你是中国法律审查助手，精通民法典、个人信息保护法等法律法规。严格按照给定的审查规则清单逐条分析，仅返回 JSON 数组。",
+                    system_prompt=system_prompt,
                     temperature=0.1,
                     max_tokens=2000,
                 )
-                all_risks.extend(self._parse_llm_response(response))
+            return self._parse_llm_response(response)
+
+        try:
+            # 并行分析所有段落
+            if len(segments) == 1:
+                # 单段直接调用，避免不必要的并发开销
+                segment_results = [await _analyze_segment(0, segments[0])]
+            else:
+                segment_results = await asyncio.gather(
+                    *[_analyze_segment(i, seg) for i, seg in enumerate(segments)],
+                    return_exceptions=True,
+                )
+
+            for idx, result in enumerate(segment_results):
+                if isinstance(result, Exception):
+                    logger_manager.warning(f"第{idx + 1}段 LLM 分析失败: {result}")
+                    continue
+                all_risks.extend(result)
 
             # 去重合并
             all_risks = self.deduplicate_risks(all_risks)

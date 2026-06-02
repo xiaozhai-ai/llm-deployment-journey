@@ -172,9 +172,33 @@ class VectorStore:
         return entry_id
 
     def add_provisions_batch(self, provisions: list[dict]):
-        """批量添加法条"""
+        """批量添加法条（自动跳过已存在的条目）"""
         self.initialize()
+
+        # 查询已存在的 ID，避免重复 delete+add
+        existing_ids: set[str] = set()
+        if CHROMA_AVAILABLE and self.collection:
+            try:
+                all_ids = self.collection.get()["ids"]
+                existing_ids = set(all_ids)
+            except Exception:
+                pass
+
         for p in provisions:
+            entry_id = self._generate_id(p.get("law", ""), p.get("article", ""))
+            if entry_id in existing_ids:
+                # 已存在，仅更新关键词索引
+                with self._index_lock:
+                    self._keyword_index[entry_id] = {
+                        "law": p.get("law", ""),
+                        "article": p.get("article", ""),
+                        "title": p.get("title", ""),
+                        "content": p.get("content", ""),
+                        "category": p.get("category", ""),
+                        "keywords": p.get("keywords", []),
+                    }
+                continue
+
             self.add_provision(
                 law=p.get("law", ""),
                 article=p.get("article", ""),

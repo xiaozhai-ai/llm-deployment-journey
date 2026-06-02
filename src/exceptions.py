@@ -76,7 +76,7 @@ class UnsupportedFormatError(ParsingError):
     """不支持的文件格式"""
 
     def __init__(self, extension: str, supported: list = None):
-        supported = supported or [".pdf", ".docx", ".txt"]
+        supported = supported or [".pdf", ".docx", ".doc", ".txt"]
         message = f"不支持的文件格式: {extension}，支持的格式: {', '.join(supported)}"
         super().__init__(
             message, error_code="UNSUPPORTED_FORMAT", context={"extension": extension, "supported": supported}

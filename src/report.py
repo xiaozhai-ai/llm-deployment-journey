@@ -129,6 +129,7 @@ class ReportGenerator:
             "document_type": document_type,
             "review_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "risk_summary": {
+                "critical": risk_result.critical_count,
                 "high": risk_result.high_count,
                 "medium": risk_result.medium_count,
                 "low": risk_result.low_count,

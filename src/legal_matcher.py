@@ -56,6 +56,7 @@ class LegalMatcher:
             config = yaml.safe_load(f)
 
         self.provisions = []
+        batch_items = []
         for item in config.get("legal_provisions", []):
             provision = LegalProvision(
                 law=item["law"],
@@ -66,16 +67,11 @@ class LegalMatcher:
                 keywords=item.get("keywords", []),
             )
             self.provisions.append(provision)
+            batch_items.append(item)
 
-            # 同步到向量库
-            self.vector_store.add_provision(
-                law=provision.law,
-                article=provision.article,
-                title=provision.title,
-                content=provision.content,
-                category=provision.category,
-                keywords=provision.keywords,
-            )
+        # 批量同步到向量库（自动跳过已存在条目）
+        if batch_items:
+            self.vector_store.add_provisions_batch(batch_items)
 
         self._provisions_loaded = True
 
@@ -156,24 +152,20 @@ class LegalMatcher:
         """计算关键词相关度"""
         score = 0.0
 
-        # 关键词匹配
+        # 关键词匹配（provision 的 keywords 是人工标注的中文短语）
         for keyword in provision.keywords:
             if keyword.lower() in text:
                 score += 0.3
 
-        # 内容匹配
-        content_preview = provision.content[:100].lower()
-        text_words = set(text.split())
-        if any(word in content_preview for word in text_words if len(word) >= 2):
-            score += 0.2
+        # 内容匹配：从法条内容中提取 2-4 字短语做子串匹配
+        # 提取法条标题/核心短语（中文标题通常 2-8 字）
+        title = provision.title.lower()
+        if title and title in text:
+            score += 0.3
 
         # 分类匹配
         if category and category == provision.category:
             score += 0.2
-
-        # 标题匹配
-        if provision.title.lower() in text:
-            score += 0.3
 
         return min(score, 1.0)
 

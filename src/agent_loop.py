@@ -251,6 +251,16 @@ class AgentLoop:
                 "status": "out_of_scope",
                 "message": security_result.out_of_scope_reason,
                 "security_warning": security_result.risk_warning,
+                "risk_summary": {"total": 0, "critical": 0, "high": 0, "medium": 0, "low": 0},
+                "risks": [],
+                "report_markdown": "",
+                "revisions_html": "",
+                "tool_call_log": [],
+                "warnings": [security_result.out_of_scope_reason],
+                "clauses": [],
+                "original_text": text,
+                "document_type": document_type,
+                "playbook_id": playbook_id,
             }
 
         # 获取策略
@@ -367,10 +377,11 @@ class AgentLoop:
         docx_bytes = None
         if self.redliner and risk_result.risks:
             await self._update_progress(task, TaskStage.REVISION_GEN, 95, "正在生成修订建议", progress_callback)
+            revision_llm_client = None
             try:
                 if use_llm and self.llm_client_factory:
-                    llm_client = self.llm_client_factory()
-                    self.redliner.set_llm_client(llm_client)
+                    revision_llm_client = self.llm_client_factory()
+                    self.redliner.set_llm_client(revision_llm_client)
 
                 revision_doc = await self.redliner.generate_revisions(text, risk_result.risks, playbook)
                 revisions_html = revision_doc.html_full_diff
@@ -386,6 +397,12 @@ class AgentLoop:
                 user_msg = get_user_friendly_message(error_code)
                 llm_warnings.append(f"📝 {user_msg}")
                 self.logger.warning(f"修订建议生成降级: {e}")
+            finally:
+                if revision_llm_client is not None:
+                    try:
+                        revision_llm_client.close()
+                    except Exception:
+                        pass
 
         # Complete (100%)
         await self._update_progress(task, TaskStage.COMPLETE, 100, "审查完成", progress_callback)
